@@ -1,33 +1,40 @@
-const express = require('express');
-const cors = require('cors');
+// server/server.js
+
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+
+// Load environment variables
+dotenv.config();
+
 const app = express();
+
+// Middleware
 app.use(cors());
 app.use(express.json());
-const auth = require('./middleware/auth');
+
+// Import middleware
+const auth = require("./middleware/auth");
+
+// Import routes
+const authRoutes = require("./routes/auth");
+
+// Use routes
+app.use("/api/auth", authRoutes);
 
 // Protect dashboard route
-app.get('/api/dashboard', auth, (req, res) => {
-  res.json({ message: 'Welcome to the dashboard, you are authenticated!' });
+app.get("/api/dashboard", auth, (req, res) => {
+  res.json({ message: "Welcome to the dashboard, you are authenticated!" });
 });
-
-// Database connection
-const { Pool } = require('pg');
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-});
-
-const authRoutes = require('./routes/auth');
-app.use('/api/auth', authRoutes);
 
 // Test route
-app.get('/', (req, res) => {
-  res.send('Driver Behavior Monitoring API');
+app.get("/", (req, res) => {
+  res.send("Driver Behavior Monitoring API");
 });
 
-app.listen(5432, () => {
-  console.log('Server is running on port 5432');
-});
+// Define port
+const PORT = process.env.PORT || 5000;
 
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

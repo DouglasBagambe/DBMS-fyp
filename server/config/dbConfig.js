@@ -1,5 +1,7 @@
-const { Pool } = require('pg');
-require('dotenv').config(); // Make sure to load environment variables
+// server/config/dbConfig.js
+
+const { Pool } = require("pg");
+require("dotenv").config(); // Load environment variables
 
 // Create a new pool instance with PostgreSQL connection parameters
 const pool = new Pool({
@@ -11,9 +13,10 @@ const pool = new Pool({
 });
 
 // Test the database connection
-pool.connect()
-  .then(() => console.log('Connected to the database'))
-  .catch((err) => console.error('Database connection error', err));
+pool
+  .connect()
+  .then(() => console.log("Connected to the database"))
+  .catch((err) => console.error("Database connection error", err.stack));
 
 // Export the pool for use in other parts of the application
 module.exports = pool;
