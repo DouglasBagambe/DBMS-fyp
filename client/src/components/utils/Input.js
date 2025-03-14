@@ -1,38 +1,97 @@
 // src/components/utils/Input.js
 import React from "react";
+import PropTypes from "prop-types";
+import theme from "../../theme/theme";
 
-export const Input = ({
-  label,
+const Input = ({
   type = "text",
-  name,
+  label,
   value,
   onChange,
-  placeholder = "",
-  required = false,
+  placeholder,
+  error,
+  helperText,
+  fullWidth = true,
+  disabled = false,
   className = "",
-  error = "",
+  required = false,
+  id,
+  name,
+  ...rest
 }) => {
+  // Generate a unique ID if not provided
+  const inputId = id || `input-${Math.random().toString(36).substring(2, 9)}`;
+
+  const inputStyles = {
+    width: fullWidth ? "100%" : "auto",
+    ...theme.inputs.default,
+    ...(error ? theme.inputs.error : {}),
+    ...(disabled
+      ? { backgroundColor: theme.colors.neutral.gray100, cursor: "not-allowed" }
+      : {}),
+  };
+
+  const labelStyles = {
+    display: "block",
+    marginBottom: theme.spacing["2"],
+    fontWeight: theme.fontWeight.medium,
+    color: error ? theme.colors.danger.main : theme.colors.text.primary,
+    fontSize: theme.fontSizes.sm,
+  };
+
+  const helperTextStyles = {
+    marginTop: theme.spacing["1"],
+    fontSize: theme.fontSizes.xs,
+    color: error ? theme.colors.danger.main : theme.colors.text.secondary,
+  };
+
+  const containerStyles = {
+    marginBottom: theme.spacing["4"],
+    width: fullWidth ? "100%" : "auto",
+  };
+
   return (
-    <div className={`mb-4 ${className}`}>
+    <div style={containerStyles} className={className}>
       {label && (
-        <label
-          htmlFor={name}
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          {label} {required && <span className="text-red-500">*</span>}
+        <label htmlFor={inputId} style={labelStyles}>
+          {label}{" "}
+          {required && (
+            <span style={{ color: theme.colors.danger.main }}>*</span>
+          )}
         </label>
       )}
       <input
+        id={inputId}
         type={type}
-        id={name}
-        name={name}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
+        disabled={disabled}
         required={required}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+        name={name || inputId}
+        className="form-input"
+        style={inputStyles}
+        {...rest}
       />
-      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+      {helperText && <p style={helperTextStyles}>{helperText}</p>}
     </div>
   );
 };
+
+Input.propTypes = {
+  type: PropTypes.string,
+  label: PropTypes.string,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onChange: PropTypes.func,
+  placeholder: PropTypes.string,
+  error: PropTypes.bool,
+  helperText: PropTypes.string,
+  fullWidth: PropTypes.bool,
+  disabled: PropTypes.bool,
+  className: PropTypes.string,
+  required: PropTypes.bool,
+  id: PropTypes.string,
+  name: PropTypes.string,
+};
+
+export default Input;

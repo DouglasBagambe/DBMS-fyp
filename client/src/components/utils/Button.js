@@ -1,38 +1,127 @@
 // src/components/utils/Button.js
 import React from "react";
+import PropTypes from "prop-types";
+import theme from "../../theme/theme";
 
-export const Button = ({
+const Button = ({
   children,
   onClick,
   variant = "primary",
+  size = "medium",
+  fullWidth = false,
+  disabled = false,
   className = "",
   type = "button",
-  disabled = false,
+  startIcon,
+  endIcon,
+  ...rest
 }) => {
-  const baseClasses =
-    "px-4 py-2 rounded-md font-medium transition-colors duration-200 focus:outline-none focus:ring-2";
+  const getVariantStyles = () => {
+    if (disabled) {
+      return theme.buttons.disabled;
+    }
 
-  const variantClasses = {
-    primary:
-      "bg-primary-600 hover:bg-primary-700 text-white focus:ring-primary-500",
-    secondary:
-      "bg-secondary-500 hover:bg-secondary-700 text-white focus:ring-secondary-400",
-    outline:
-      "border border-primary-600 text-primary-600 hover:bg-primary-50 focus:ring-primary-500",
-    danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500",
-    ghost: "bg-transparent hover:bg-gray-100 text-gray-700 focus:ring-gray-500",
+    switch (variant) {
+      case "secondary":
+        return theme.buttons.secondary;
+      case "outline":
+        return theme.buttons.outline;
+      case "text":
+        return theme.buttons.text;
+      case "danger":
+        return theme.buttons.danger;
+      case "primary":
+      default:
+        return theme.buttons.primary;
+    }
+  };
+
+  const getSizeStyles = () => {
+    switch (size) {
+      case "small":
+        return {
+          padding: `${theme.spacing["2"]} ${theme.spacing["4"]}`,
+          fontSize: theme.fontSizes.sm,
+        };
+      case "large":
+        return {
+          padding: `${theme.spacing["4"]} ${theme.spacing["8"]}`,
+          fontSize: theme.fontSizes.lg,
+        };
+      case "medium":
+      default:
+        return {
+          padding: `${theme.spacing["3"]} ${theme.spacing["6"]}`,
+          fontSize: theme.fontSizes.base,
+        };
+    }
+  };
+
+  const variantStyles = getVariantStyles();
+  const sizeStyles = getSizeStyles();
+
+  const buttonStyles = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
+    fontWeight: theme.fontWeight.medium,
+    transition: "all 0.2s ease-in-out",
+    cursor: disabled ? "not-allowed" : "pointer",
+    width: fullWidth ? "100%" : "auto",
+    ...variantStyles,
+    ...sizeStyles,
+  };
+
+  const iconStyles = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+
+  const startIconStyles = {
+    ...iconStyles,
+    marginRight: theme.spacing["2"],
+  };
+
+  const endIconStyles = {
+    ...iconStyles,
+    marginLeft: theme.spacing["2"],
   };
 
   return (
     <button
       type={type}
-      onClick={onClick}
+      className={`btn btn-${variant} ${className}`}
+      onClick={!disabled ? onClick : undefined}
       disabled={disabled}
-      className={`${baseClasses} ${variantClasses[variant]} ${
-        disabled ? "opacity-50 cursor-not-allowed" : ""
-      } ${className}`}
+      style={buttonStyles}
+      {...rest}
     >
+      {startIcon && <span style={startIconStyles}>{startIcon}</span>}
       {children}
+      {endIcon && <span style={endIconStyles}>{endIcon}</span>}
     </button>
   );
 };
+
+Button.propTypes = {
+  children: PropTypes.node.isRequired,
+  onClick: PropTypes.func,
+  variant: PropTypes.oneOf([
+    "primary",
+    "secondary",
+    "outline",
+    "text",
+    "danger",
+  ]),
+  size: PropTypes.oneOf(["small", "medium", "large"]),
+  fullWidth: PropTypes.bool,
+  disabled: PropTypes.bool,
+  className: PropTypes.string,
+  type: PropTypes.oneOf(["button", "submit", "reset"]),
+  startIcon: PropTypes.node,
+  endIcon: PropTypes.node,
+};
+
+export default Button;
