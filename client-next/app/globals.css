@@ -33,15 +33,10 @@ body {
     margin: 0;
     padding: 0;
     background-color: #f0f8ff;
-    @apply text-gray-800;
+    color: #4a5568; /* Replaces text-gray-800 */
   }
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
+  h1, h2, h3, h4, h5, h6 {
     @apply font-bold;
   }
 }
@@ -50,35 +45,27 @@ body {
   .btn {
     @apply px-6 py-3 rounded-lg text-white font-semibold transition-all duration-300 inline-block transform hover:scale-105 active:scale-95;
   }
-
   .btn-primary {
     @apply bg-primary-600 hover:bg-primary-700 shadow-md hover:shadow-glow;
   }
-
   .btn-secondary {
     @apply bg-white text-primary-600 border border-primary-600 hover:bg-primary-50 shadow-md;
   }
-
   .btn-outline {
     @apply bg-transparent text-primary-600 border border-primary-600 hover:bg-primary-50;
   }
-
   .card {
     @apply bg-white rounded-xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl;
   }
-
   .input-field {
     @apply w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
   }
-
   .glass-effect {
     @apply bg-white bg-opacity-90 backdrop-filter backdrop-blur-md;
   }
-
   .section {
     @apply py-16 md:py-24;
   }
-
   .container-custom {
     @apply container mx-auto px-4 sm:px-6 lg:px-8;
   }
