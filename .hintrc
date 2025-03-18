@@ -6,6 +6,7 @@
     "meta-viewport": "off",
     "axe/language": "off",
     "meta-charset-utf-8": "off",
-    "compat-api/css": "off"
+    "compat-api/css": "off",
+    "compat-api/html": "off"
   }
 }
