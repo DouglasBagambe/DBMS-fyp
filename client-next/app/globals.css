@@ -33,11 +33,11 @@ body {
     margin: 0;
     padding: 0;
     background-color: #f0f8ff;
-    color: #4a5568; /* Replaces text-gray-800 */
+    color: #4a5568;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-bold;
+    font-weight: 700; /* Replaces @apply font-bold */
   }
 }
 
