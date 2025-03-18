@@ -1,3 +1,5 @@
+// app/components/Hero.js
+
 "use client";
 
 import React from "react";

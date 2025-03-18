@@ -1,4 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
+
+// app/page.js
+
 "use client";
 
 import React from "react";
