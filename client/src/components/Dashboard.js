@@ -1,19 +1,21 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+// src/components/Dashboard.js
+
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 
 const Dashboard = () => {
   const [data, setData] = useState(null);
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem("token");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/dashboard', {
+        const res = await axios.get("http://localhost:5000/api/dashboard", {
           headers: { Authorization: `Bearer ${token}` },
         });
         setData(res.data);
       } catch (error) {
-        console.error('Error fetching data', error);
+        console.error("Error fetching data", error);
       }
     };
 
@@ -21,108 +23,123 @@ const Dashboard = () => {
   }, [token]);
 
   const dashboardStyle = {
-    display: 'flex',
-    height: '100vh',
-    backgroundColor: '#f0f8ff',
+    display: "flex",
+    height: "100vh",
+    backgroundColor: "#f0f8ff",
   };
 
   const sidebarStyle = {
-    width: '250px',
-    backgroundColor: '#4CAF50',
-    color: 'white',
-    padding: '20px',
-    display: 'flex',
-    flexDirection: 'column',
+    width: "250px",
+    backgroundColor: "#4CAF50",
+    color: "white",
+    padding: "20px",
+    display: "flex",
+    flexDirection: "column",
   };
 
   const navLinkStyle = {
-    color: 'white',
-    textDecoration: 'none',
-    padding: '10px 15px',
-    margin: '5px 0',
-    borderRadius: '5px',
-    transition: 'background-color 0.3s',
+    color: "white",
+    textDecoration: "none",
+    padding: "10px 15px",
+    margin: "5px 0",
+    borderRadius: "5px",
+    transition: "background-color 0.3s",
   };
 
   const navLinkHoverStyle = {
-    backgroundColor: '#45a049',
+    backgroundColor: "#45a049",
   };
 
   const headerStyle = {
-    flex: '1',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px',
-    backgroundColor: '#fff',
-    boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+    flex: "1",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "20px",
+    backgroundColor: "#fff",
+    boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
   };
 
   const titleStyle = {
-    fontSize: '24px',
-    fontWeight: 'bold',
+    fontSize: "24px",
+    fontWeight: "bold",
   };
 
   const userSectionStyle = {
-    display: 'flex',
-    alignItems: 'center',
+    display: "flex",
+    alignItems: "center",
   };
 
   const logoutButtonStyle = {
-    marginLeft: '20px',
-    padding: '10px 15px',
-    backgroundColor: '#d9534f',
-    color: 'white',
-    border: 'none',
-    borderRadius: '5px',
-    cursor: 'pointer',
+    marginLeft: "20px",
+    padding: "10px 15px",
+    backgroundColor: "#d9534f",
+    color: "white",
+    border: "none",
+    borderRadius: "5px",
+    cursor: "pointer",
   };
 
   const contentStyle = {
-    flex: '3',
-    padding: '20px',
-    overflowY: 'auto',
+    flex: "3",
+    padding: "20px",
+    overflowY: "auto",
   };
 
   const cardStyle = {
-    backgroundColor: 'white',
-    borderRadius: '8px',
-    padding: '20px',
-    margin: '20px 0',
-    boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+    backgroundColor: "white",
+    borderRadius: "8px",
+    padding: "20px",
+    margin: "20px 0",
+    boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
   };
 
   const overviewStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
+    display: "flex",
+    justifyContent: "space-between",
   };
 
   const metricStyle = {
-    flex: '1',
-    margin: '0 10px',
-    textAlign: 'center',
+    flex: "1",
+    margin: "0 10px",
+    textAlign: "center",
   };
 
   const chartStyle = {
-    height: '200px',
-    backgroundColor: '#e7f1ff',
-    borderRadius: '8px',
-    margin: '20px 0',
+    height: "200px",
+    backgroundColor: "#e7f1ff",
+    borderRadius: "8px",
+    margin: "20px 0",
   };
 
   return (
     <div style={dashboardStyle}>
       <div style={sidebarStyle}>
         <h2>Driver Monitoring</h2>
-        <a href="/dashboard" style={navLinkStyle}>Dashboard</a>
-        <a href="/drivers" style={navLinkStyle}>Driver Profiles</a>
-        <a href="/analytics" style={navLinkStyle}>Trip Analytics</a>
-        <a href="/alerts" style={navLinkStyle}>Safety Alerts</a>
-        <a href="/settings" style={navLinkStyle}>Settings</a>
-        <button style={logoutButtonStyle} onClick={() => {
-          localStorage.removeItem('token');
-          window.location.href = '/login';
-        }}>Logout</button>
+        <a href="/dashboard" style={navLinkStyle}>
+          Dashboard
+        </a>
+        <a href="/drivers" style={navLinkStyle}>
+          Driver Profiles
+        </a>
+        <a href="/analytics" style={navLinkStyle}>
+          Trip Analytics
+        </a>
+        <a href="/alerts" style={navLinkStyle}>
+          Safety Alerts
+        </a>
+        <a href="/settings" style={navLinkStyle}>
+          Settings
+        </a>
+        <button
+          style={logoutButtonStyle}
+          onClick={() => {
+            localStorage.removeItem("token");
+            window.location.href = "/login";
+          }}
+        >
+          Logout
+        </button>
       </div>
       <div style={contentStyle}>
         <div style={headerStyle}>
@@ -136,15 +153,15 @@ const Dashboard = () => {
           <div style={overviewStyle}>
             <div style={metricStyle}>
               <h4>Total Trips</h4>
-              <p>{data ? data.totalTrips : 'Loading...'}</p>
+              <p>{data ? data.totalTrips : "Loading..."}</p>
             </div>
             <div style={metricStyle}>
               <h4>Safe Driving %</h4>
-              <p>{data ? `${data.safeDrivingPercentage}%` : 'Loading...'}</p>
+              <p>{data ? `${data.safeDrivingPercentage}%` : "Loading..."}</p>
             </div>
             <div style={metricStyle}>
               <h4>Average Score</h4>
-              <p>{data ? data.averageScore : 'Loading...'}</p>
+              <p>{data ? data.averageScore : "Loading..."}</p>
             </div>
           </div>
         </div>
