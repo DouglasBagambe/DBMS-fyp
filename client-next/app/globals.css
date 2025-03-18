@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --background: #0d1b2a; /* Deep navy */
-  --foreground: #e0e0e0; /* Light gray */
+  --background: #f0f8ff;
+  --foreground: #171717;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #1a1a1a;
     --foreground: #ededed;
   }
 }
@@ -22,62 +22,23 @@ body {
   padding: 0;
 }
 
-@layer base {
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-weight: 700;
-  }
-}
-
 @layer components {
   .btn {
-    padding: 0.75rem 1.5rem;
-    border-radius: 0.5rem;
-    color: #ffffff;
-    font-weight: 600;
-    transition: all 300ms ease;
-    display: inline-block;
-    background: linear-gradient(45deg, #00ffcc, #ff007a);
-    box-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
-  }
-  .btn:hover {
-    transform: scale(1.05);
-    box-shadow: 0 0 20px rgba(0, 255, 204, 0.8);
-  }
-  .btn:active {
-    transform: scale(0.95);
+    @apply px-6 py-3 rounded-lg font-semibold text-white bg-primary-600 hover:bg-primary-700 transition-all duration-300 shadow-md hover:shadow-glow;
   }
   .btn-outline {
-    background: transparent;
-    border: 2px solid #00ffcc;
-    color: #00ffcc;
-  }
-  .btn-outline:hover {
-    background: rgba(0, 255, 204, 0.1);
+    @apply bg-transparent border border-primary-600 text-primary-600 hover:bg-primary-50;
   }
   .card {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(0, 255, 204, 0.3);
-    border-radius: 1rem;
-    padding: 1.5rem;
-    transition: all 300ms ease;
-    box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+    @apply bg-white rounded-xl p-6 shadow-lg transition-all duration-300 hover:shadow-xl;
   }
-  .card:hover {
-    box-shadow: 0 0 25px rgba(0, 255, 204, 0.5);
-    transform: translateY(-5px);
+  .input-field {
+    @apply w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500;
   }
   .section {
-    padding: 4rem 1rem;
+    @apply py-16 md:py-24;
   }
   .container-custom {
-    width: 100%;
-    margin: 0 auto;
-    padding: 0 1rem;
-    max-width: 80rem;
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
 }
