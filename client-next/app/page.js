@@ -7,56 +7,35 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Hero from "./components/Hero";
-import FeatureCard from "./components/FeatureCard";
-import Button from "./components/Button";
 import Link from "next/link";
-import { FiShield, FiAlertTriangle, FiBarChart } from "react-icons/fi";
+import Button from "./components/Button";
 
 export default function Home() {
-  const features = [
-    {
-      title: "Real-Time Detection",
-      description: "Instantly spot distractions with AI precision.",
-      icon: <FiShield size={32} />,
-    },
-    {
-      title: "Smart Alerts",
-      description: "Neon-fast notifications to prevent incidents.",
-      icon: <FiAlertTriangle size={32} />,
-    },
-    {
-      title: "Data Insights",
-      description: "Futuristic analytics for fleet mastery.",
-      icon: <FiBarChart size={32} />,
-    },
-  ];
-
   return (
-    <div className="relative">
+    <div>
       <Hero />
-      <section className="section">
-        <div className="container-custom">
+      <section className="section bg-primary-50">
+        <div className="container-custom text-center">
           <motion.h2
-            className="text-5xl font-bold text-center text-neon mb-12"
+            className="text-4xl font-bold text-primary-700 mb-8"
             initial={{ opacity: 0, y: 50 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
           >
-            Core Systems
+            Take Control of Road Safety
           </motion.h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {features.map((feature, i) => (
-              <FeatureCard key={i} {...feature} delay={i * 0.2} />
-            ))}
-          </div>
           <motion.div
-            className="text-center mt-12"
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.6 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
           >
             <Link href="/dashboard">
               <Button>Launch Dashboard</Button>
+            </Link>
+            <Link href="/signup">
+              <Button variant="outline" className="ml-4">
+                Join Now
+              </Button>
             </Link>
           </motion.div>
         </div>
