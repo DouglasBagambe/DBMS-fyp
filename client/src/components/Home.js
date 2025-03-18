@@ -2,63 +2,86 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
+import Header from "../components/Header";
+import "../styles/Home.css";
 
 const Home = () => {
-  // Define inline styles
-  const containerStyle = {
-    textAlign: "center",
-    marginTop: "50px",
-    backgroundColor: "#f0f8ff", // Light background color
-    padding: "20px", // Add some padding
-    borderRadius: "10px", // Rounded corners
-    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)", // Soft shadow
-  };
-
-  const headerStyle = {
-    fontSize: "2.5rem", // Large header font size
-    color: "#4CAF50", // Green color
-  };
-
-  const paragraphStyle = {
-    fontSize: "1.2rem", // Medium font size
-    color: "#555", // Dark gray color
-    marginBottom: "40px", // Space below the paragraph
-  };
-
-  const linkStyle = {
-    margin: "10px",
-    textDecoration: "none",
-    color: "white", // Text color for buttons
-    padding: "15px 25px", // Padding inside the buttons
-    fontSize: "1rem", // Font size for the buttons
-    backgroundColor: "#4CAF50", // Button background color
-    border: "none", // No border
-    borderRadius: "5px", // Rounded corners
-    cursor: "pointer", // Pointer cursor on hover
-    transition: "background-color 0.3s ease", // Smooth transition for hover effect
-  };
-
-  const hoverStyle = {
-    ...linkStyle,
-    backgroundColor: "#45a049", // Darker green on hover
-  };
-
   return (
-    <div style={containerStyle}>
-      <h1 style={headerStyle}>
-        Welcome to the Driver Behavior Monitoring System
-      </h1>
-      <p style={paragraphStyle}>
-        Your tool for monitoring and improving driver behavior.
-      </p>
-      <div>
-        <Link to="/login" style={linkStyle}>
-          Login
-        </Link>
-        <Link to="/signup" style={linkStyle}>
-          Sign Up
-        </Link>
-      </div>
+    <div className="home-container">
+      <Header />
+      <header className="hero">
+        <div className="container">
+          <div className="hero-content">
+            <h1 className="slide-up">Driver Behavior Monitoring System</h1>
+            <p className="slide-up">
+              Advanced analytics and insights to improve driver safety and
+              efficiency.
+            </p>
+            <div className="cta-buttons slide-up">
+              <Link to="/signup" className="btn btn-primary">
+                Get Started
+              </Link>
+              <Link to="/login" className="btn btn-secondary">
+                Login to Dashboard
+              </Link>
+            </div>
+          </div>
+          <div className="hero-image slide-up">
+            <div className="image-placeholder">
+              <div className="dashboard-preview"></div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <section className="features">
+        <div className="container">
+          <h2 className="section-title">Key Features</h2>
+          <div className="feature-grid">
+            <div className="feature-card">
+              <div className="feature-icon">
+                <i className="icon-analytics"></i>
+              </div>
+              <h3>Real-time Analytics</h3>
+              <p>
+                Monitor driver behavior patterns with advanced analytics tools.
+              </p>
+            </div>
+            <div className="feature-card">
+              <div className="feature-icon">
+                <i className="icon-alert"></i>
+              </div>
+              <h3>Incident Alerts</h3>
+              <p>
+                Receive immediate notifications for unsafe driving behaviors.
+              </p>
+            </div>
+            <div className="feature-card">
+              <div className="feature-icon">
+                <i className="icon-report"></i>
+              </div>
+              <h3>Comprehensive Reports</h3>
+              <p>Generate detailed reports to track improvements over time.</p>
+            </div>
+            <div className="feature-card">
+              <div className="feature-icon">
+                <i className="icon-ai"></i>
+              </div>
+              <h3>AI-Powered Insights</h3>
+              <p>Leverage machine learning to predict potential risks.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <footer className="footer">
+        <div className="container">
+          <div className="footer-content">
+            <div className="footer-logo">
+              <span>DB</span>MS
+            </div>
+            <p>© 2025 Driver Behavior Monitoring System</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

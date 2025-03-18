@@ -1,0 +1,237 @@
+/* src/styles/Header.css */
+
+.header {
+  width: 100%;
+  padding: 10px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  backdrop-filter: blur(6px);
+  background-color: rgba(247, 247, 247, 0.75);
+  border: 1px solid #1e88e5;
+  border-radius: 100px;
+  padding: 8px 20px;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: rgb(29, 31, 19);
+  justify-content: center;
+}
+
+.logo-icon {
+  width: 30px;
+  height: 30px;
+  margin-right: 8px;
+}
+
+.logo-text {
+  font-family: "Manrope", sans-serif;
+  font-weight: 500;
+  font-size: 20px;
+  line-height: 20px;
+  color: #1e88e5;
+}
+
+.logo-text p {
+  margin: 0;
+}
+
+.logo-heading {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 20px;
+  color: #333;
+}
+
+.logo-heading span {
+  color: #1e88e5;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.nav-item {
+  font-family: "Manrope", sans-serif;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 16px;
+  text-align: center;
+  color: rgb(29, 31, 19);
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 100px;
+  transition: background-color 0.3s ease;
+}
+
+.nav-item:hover {
+  background-color: rgba(225, 225, 225, 0.5);
+}
+
+.action-button-container {
+  display: flex;
+  align-items: center;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background-color: #1e88e5;
+  color: white;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 100px;
+  font-family: "Manrope", sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 14px;
+  transition: background-color 0.3s ease;
+}
+
+.action-button:hover {
+  background-color: rgb(220, 30, 30);
+}
+
+.button-text {
+  margin-right: 4px;
+}
+
+.button-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background-color: white;
+  border-radius: 50%;
+}
+
+.button-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: rgb(29, 31, 19);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .header-container {
+    padding: 8px 15px;
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .action-button {
+    padding: 6px 12px;
+  }
+}
+
+.header {
+  width: 100%;
+  padding: 10px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.profile-container {
+  position: relative;
+}
+
+.profile-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background-color: #1e88e5;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.profile-button:hover {
+  background-color: rgb(220, 30, 30);
+}
+
+.profile-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.profile-menu {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  width: 200px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 200;
+}
+
+.profile-menu-item {
+  display: block;
+  padding: 12px 16px;
+  text-decoration: none;
+  color: #333;
+  font-family: "Manrope", sans-serif;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.profile-menu-item:hover {
+  background-color: rgba(30, 136, 229, 0.1);
+}
+
+.menu-divider {
+  margin: 4px 0;
+  border: none;
+  border-top: 1px solid #eee;
+}
+
+.logout {
+  color: rgb(220, 30, 30);
+}
+
+.logout:hover {
+  background-color: rgba(220, 30, 30, 0.1);
+}
+
+/* Responsive adjustments for profile */
+@media (max-width: 768px) {
+  .profile-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .profile-menu {
+    width: 180px;
+  }
+}

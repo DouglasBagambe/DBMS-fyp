@@ -1,138 +1,137 @@
+/* eslint-disable no-unused-vars */
 // src/components/Signup.js
 
 import React, { useState } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
+import "../styles/Auth.css";
 
 const Signup = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
+    setMessage("");
+
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setMessage("Passwords do not match");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await axios.post("http://localhost:3000/api/auth/signup", {
         name,
         email,
         password,
       });
-      setMessage("Signup successful! You can now log in.");
-      navigate("/dashboard");
+      setMessage("Signup successful! Redirecting to dashboard...");
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1000);
     } catch (error) {
-      setMessage("Signup failed. Check your details.");
+      setMessage(
+        error.response?.data?.message ||
+          "Signup failed. Please check your details."
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const containerStyle = {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100vh",
-    backgroundColor: "#f0f8ff",
-    padding: "20px",
-  };
-
-  const formStyle = {
-    backgroundColor: "white",
-    borderRadius: "8px",
-    boxShadow: "0 4px 15px rgba(0, 0, 0, 0.2)",
-    padding: "40px",
-    width: "100%",
-    maxWidth: "400px",
-  };
-
-  const titleStyle = {
-    fontSize: "2rem",
-    marginBottom: "20px",
-    textAlign: "center",
-    color: "#4CAF50",
-  };
-
-  const inputStyle = {
-    width: "100%",
-    padding: "15px",
-    margin: "10px 0",
-    border: "1px solid #ccc",
-    borderRadius: "5px",
-    fontSize: "1rem",
-    transition: "border-color 0.3s",
-  };
-
-  const buttonStyle = {
-    width: "100%",
-    padding: "15px",
-    border: "none",
-    borderRadius: "5px",
-    backgroundColor: "#4CAF50",
-    color: "white",
-    fontSize: "1rem",
-    cursor: "pointer",
-    transition: "background-color 0.3s ease",
-  };
-
-  const messageStyle = {
-    textAlign: "center",
-    color: "red",
-    marginTop: "20px",
-  };
-
-  const linkStyle = {
-    textAlign: "center",
-    marginTop: "15px",
-  };
-
   return (
-    <div style={containerStyle}>
-      <form onSubmit={handleSubmit} style={formStyle}>
-        <h2 style={titleStyle}>Signup</h2>
-        <input
-          type="text"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          style={inputStyle}
-        />
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={inputStyle}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={inputStyle}
-        />
-        <button type="submit" style={buttonStyle}>
-          Signup
-        </button>
-        {message && <p style={messageStyle}>{message}</p>}
-        <div style={linkStyle}>
-          <p>
-            Already have an account?{" "}
-            <Link
-              to="/login"
-              style={{ color: "#4CAF50", textDecoration: "none" }}
+    <div className="auth-container">
+      <div className="auth-wrapper">
+        <div className="auth-card">
+          <div className="auth-header">
+            <Link to="/" className="logo">
+              <span>DB</span>MS
+            </Link>
+            <h2>Create Account</h2>
+            <p>Sign up to access the driver monitoring dashboard</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="auth-form">
+            <div className="form-group">
+              <label htmlFor="name">Full Name</label>
+              <input
+                type="text"
+                id="name"
+                placeholder="Enter your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="form-control"
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="email">Email</label>
+              <input
+                type="email"
+                id="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="form-control"
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <input
+                type="password"
+                id="password"
+                placeholder="Create a password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="form-control"
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="confirmPassword">Confirm Password</label>
+              <input
+                type="password"
+                id="confirmPassword"
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className="form-control"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className={`btn btn-primary btn-block ${
+                isLoading ? "btn-loading" : ""
+              }`}
+              disabled={isLoading}
             >
-              Login
-            </Link>
-          </p>
-          <p>
-            <Link to="/" style={{ color: "#4CAF50", textDecoration: "none" }}>
-              Back to Home
-            </Link>
-          </p>
+              {isLoading ? "Creating account..." : "Sign Up"}
+            </button>
+
+            {message && <div className="auth-message">{message}</div>}
+          </form>
+
+          <div className="auth-footer">
+            <p>
+              Already have an account? <Link to="/login">Login</Link>
+            </p>
+          </div>
         </div>
-      </form>
+      </div>
     </div>
   );
 };
