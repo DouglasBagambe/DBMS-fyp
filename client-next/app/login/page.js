@@ -1,31 +1,7 @@
 // app/login/page.js
 
-"use client";
+import Login from "../components/Login";
 
-import React from "react";
-import { motion } from "framer-motion";
-import Button from "../components/Button";
-
-export default function Login() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-dark">
-      <motion.div
-        className="card p-8 max-w-md w-full"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-      >
-        <h2 className="text-3xl font-bold text-neon mb-6 text-center">
-          Access SafeDrive
-        </h2>
-        <input className="input-field mb-4" placeholder="Email" />
-        <input
-          className="input-field mb-6"
-          type="password"
-          placeholder="Password"
-        />
-        <Button className="w-full">Login</Button>
-      </motion.div>
-    </div>
-  );
+export default function LoginPage() {
+  return <Login />;
 }
