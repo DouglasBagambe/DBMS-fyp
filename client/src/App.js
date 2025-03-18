@@ -10,6 +10,7 @@ import Login from "./components/Login";
 import Signup from "./components/Signup";
 import Dashboard from "./components/Dashboard";
 import AnalyticsPage from "./components/Analytic";
+import UserProfile from "./components/UserProfile";
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/Analytic" element={<AnalyticsPage />} />
+        <Route path="/userprofile" element={<UserProfile />} />
       </Routes>
     </div>
   );

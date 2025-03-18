@@ -8,7 +8,9 @@ const Header = () => {
   const location = useLocation();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const profileMenuRef = useRef(null);
+  const mobileMenuRef = useRef(null);
 
   // Check if user is on homepage
   const isHomepage = location.pathname === "/";
@@ -16,11 +18,10 @@ const Header = () => {
   // Simulating authentication check - replace with your actual auth logic
   useEffect(() => {
     // Example: If not on homepage, consider user logged in
-    // In a real app, you'd check auth state from context/redux/localStorage
     setIsLoggedIn(!isHomepage);
   }, [isHomepage]);
 
-  // Close profile menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -28,6 +29,12 @@ const Header = () => {
         !profileMenuRef.current.contains(event.target)
       ) {
         setShowProfileMenu(false);
+      }
+      if (
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(event.target)
+      ) {
+        setShowMobileMenu(false);
       }
     };
 
@@ -37,9 +44,13 @@ const Header = () => {
     };
   }, []);
 
-  // Toggle profile menu
+  // Toggle menus
   const toggleProfileMenu = () => {
     setShowProfileMenu(!showProfileMenu);
+  };
+
+  const toggleMobileMenu = () => {
+    setShowMobileMenu(!showMobileMenu);
   };
 
   return (
@@ -56,7 +67,8 @@ const Header = () => {
           </Link>
         </div>
 
-        <div className="nav-links">
+        {/* Desktop Navigation */}
+        <div className="nav-links desktop-nav">
           <Link to="/dashboard" className="nav-item">
             Dashboard
           </Link>
@@ -67,6 +79,78 @@ const Header = () => {
             Support
           </Link>
         </div>
+
+        {/* Mobile Menu Button */}
+        <div className="mobile-menu-button" onClick={toggleMobileMenu}>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </div>
+
+        {/* Mobile Navigation Menu */}
+        {showMobileMenu && (
+          <div className="mobile-menu" ref={mobileMenuRef}>
+            <Link
+              to="/dashboard"
+              className="mobile-menu-item"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              Dashboard
+            </Link>
+            <Link
+              to="/analytic"
+              className="mobile-menu-item"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              Analytics
+            </Link>
+            <Link
+              to="/support"
+              className="mobile-menu-item"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              Support
+            </Link>
+            {isLoggedIn && (
+              <>
+                <hr className="menu-divider" />
+                <Link
+                  to="/userprofile"
+                  className="mobile-menu-item"
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  User Profile
+                </Link>
+                <Link
+                  to="/settings"
+                  className="mobile-menu-item"
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  Settings
+                </Link>
+                <Link
+                  to="/"
+                  className="mobile-menu-item logout"
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  Logout
+                </Link>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="action-button-container">
           {!isLoggedIn ? (
@@ -117,17 +201,33 @@ const Header = () => {
               {/* Profile dropdown menu */}
               {showProfileMenu && (
                 <div className="profile-menu">
-                  <Link to="/profile" className="profile-menu-item">
+                  <Link
+                    to="/userprofile"
+                    className="profile-menu-item"
+                    onClick={() => setShowProfileMenu(false)}
+                  >
                     User Profile
                   </Link>
-                  <Link to="/settings" className="profile-menu-item">
+                  <Link
+                    to="/settings"
+                    className="profile-menu-item"
+                    onClick={() => setShowProfileMenu(false)}
+                  >
                     Settings
                   </Link>
-                  <Link to="/notifications" className="profile-menu-item">
+                  <Link
+                    to="/notifications"
+                    className="profile-menu-item"
+                    onClick={() => setShowProfileMenu(false)}
+                  >
                     Notifications
                   </Link>
                   <hr className="menu-divider" />
-                  <Link to="/" className="profile-menu-item logout">
+                  <Link
+                    to="/"
+                    className="profile-menu-item logout"
+                    onClick={() => setShowProfileMenu(false)}
+                  >
                     Logout
                   </Link>
                 </div>
