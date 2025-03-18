@@ -1,28 +1,27 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["./app/**/*.{js,ts,jsx,tsx}", "./components/**/*.{js,ts,jsx,tsx}"],
+  content: [
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
   theme: {
     extend: {
       colors: {
-        "primary-50": "#f4fdf4",
-        "primary-100": "#e6fae6",
-        "primary-200": "#c8f5c8",
-        "primary-300": "#97e897",
-        "primary-400": "#56d256",
-        "primary-500": "#2e9d32",
-        "primary-600": "#2e7d32",
-        "primary-700": "#27632a",
-        "primary-800": "#235023",
-        "primary-900": "#1e431e",
-        "primary-950": "#0c240c",
-      },
-      fontFamily: {
-        sans: ["Inter", "sans-serif"],
-      },
-      boxShadow: {
-        glow: "0 0 15px rgba(46, 125, 50, 0.5)",
-      },
+        primary: {
+          50: '#f0f9ff',
+          100: '#e0f2fe',
+          200: '#bae6fd',
+          300: '#7dd3fc',
+          400: '#38bdf8',
+          500: '#0ea5e9',
+          600: '#0284c7',
+          700: '#0369a1',
+          800: '#075985',
+          900: '#0c4a6e',
+        }
+      }
     },
   },
   plugins: [],
-};
+}

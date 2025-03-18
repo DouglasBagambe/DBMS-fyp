@@ -3,9 +3,9 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import Hero from "../components/Hero";
-import FeatureCard from "../components/FeatureCard";
-import Button from "../components/Button";
+import Hero from "./components/Hero";
+import FeatureCard from "./components/FeatureCard";
+import Button from "./components/Button";
 import Link from "next/link";
 import {
   FiActivity,
