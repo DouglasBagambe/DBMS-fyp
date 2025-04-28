@@ -1,4 +1,4 @@
-# Driver Behavior Monitoring System - Setup Guide.
+# Driver Behavior Monitoring System - Setup Guide!
 
 This document provides step-by-step instructions for setting up and running the Driver Behavior Monitoring System project on Kali Linux or any Debian-based system. This guide covers database setup, backend configuration and frontend setup.
 
