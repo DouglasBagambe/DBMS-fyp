@@ -108,7 +108,7 @@ JWT_SECRET=driver_monitoring_secure_secret_key
 
 ### 2.5. Verify Server File Structure
 
-Ensure your server directory has the following structure:
+Ensure your server directory has the following structure;
 
 ```
 server/
