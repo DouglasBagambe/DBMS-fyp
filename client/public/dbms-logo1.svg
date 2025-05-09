@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Base circle -->
+  <circle cx="150" cy="150" r="120" fill="#f0f8ff" stroke="#0066cc" stroke-width="10"/>
+  
+  <!-- Inner circle -->
+  <circle cx="150" cy="150" r="40" fill="#0066cc" stroke="#f0f8ff" stroke-width="5"/>
+  
+  <!-- Spokes -->
+  <g>
+    <!-- Top spoke -->
+    <rect x="145" y="50" width="10" height="60" fill="#0066cc"/>
+    <!-- Right spoke -->
+    <rect x="190" y="145" width="60" height="10" fill="#0066cc"/>
+    <!-- Bottom spoke -->
+    <rect x="145" y="190" width="10" height="60" fill="#0066cc"/>
+    <!-- Left spoke -->
+    <rect x="50" y="145" width="60" height="10" fill="#0066cc"/>
+  </g>
+  
+  <!-- Grip segments -->
+  <path d="M150,30 A120,120 0 0,1 270,150" fill="none" stroke="#0066cc" stroke-width="16" stroke-linecap="round"/>
+  <path d="M150,270 A120,120 0 0,1 30,150" fill="none" stroke="#0066cc" stroke-width="16" stroke-linecap="round"/>
+  
+  <!-- Small decorative dots -->
+  <circle cx="150" cy="30" r="8" fill="#f0f8ff"/>
+  <circle cx="270" cy="150" r="8" fill="#f0f8ff"/>
+  <circle cx="150" cy="270" r="8" fill="#f0f8ff"/>
+  <circle cx="30" cy="150" r="8" fill="#f0f8ff"/>
+</svg>
