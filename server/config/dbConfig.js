@@ -1,22 +1,24 @@
 // server/config/dbConfig.js
 
 const { Pool } = require("pg");
-require("dotenv").config(); // Load environment variables
+require("dotenv").config();
 
-// Create a new pool instance with PostgreSQL connection parameters
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: 5432, // Default PostgreSQL port
+  connectionString:
+    process.env.DATABASE_URL ||
+    `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:5432/${process.env.DB_NAME}`,
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: false }
+      : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
-// Test the database connection
-pool
-  .connect()
-  .then(() => console.log("Connected to the database"))
-  .catch((err) => console.error("Database connection error", err.stack));
+pool.on("error", (err) => {
+  console.error("Unexpected error on idle client", err.stack);
+  process.exit(-1);
+});
 
-// Export the pool for use in other parts of the application
 module.exports = pool;

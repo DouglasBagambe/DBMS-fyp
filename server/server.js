@@ -2,39 +2,37 @@
 
 const express = require("express");
 const cors = require("cors");
-const dotenv = require("dotenv");
-
-// Load environment variables
-dotenv.config();
+const helmet = require("helmet");
+const compression = require("compression");
+const rateLimit = require("express-rate-limit");
+require("dotenv").config();
 
 const app = express();
 
-// Middleware
-app.use(cors());
+app.use(helmet());
+app.use(compression());
+app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
 app.use(express.json());
 
-// Import middleware
-const auth = require("./middleware/auth");
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+});
+app.use(limiter);
 
-// Import routes
 const authRoutes = require("./routes/auth");
+const authenticateToken = require("./middleware/auth");
 
-// Use routes
 app.use("/api/auth", authRoutes);
-
-// Protect dashboard route
-app.get("/api/dashboard", auth, (req, res) => {
-  res.json({ message: "Welcome to the dashboard, you are authenticated!" });
+app.get("/api/dashboard", authenticateToken, (req, res) => {
+  res.json({ message: "Authenticated dashboard access" });
 });
 
-// Test route
 app.get("/", (req, res) => {
-  res.send("Driver Behavior Monitoring API");
+  res.json({ message: "Driver Behavior Monitoring API" });
 });
 
-// Define port
 const PORT = process.env.PORT || 5000;
-
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
