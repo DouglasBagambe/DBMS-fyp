@@ -1,8 +1,9 @@
 // src/components/Login.js
 
-import React, { useState } from "react";
-import axios from "axios";
+import React, { useState, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { login } from "../utils/api";
+import { AuthContext } from "../context/AuthContext";
 import "../styles/Auth.css";
 
 const Login = () => {
@@ -10,6 +11,7 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { login: authLogin } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -18,19 +20,13 @@ const Login = () => {
     setMessage("");
 
     try {
-      const res = await axios.post("http://localhost:5000/api/auth/login", {
-        email,
-        password,
-      });
-      localStorage.setItem("token", res.data.token);
+      const { user, token } = await login({ email, password });
+      authLogin(user, token);
       setMessage("Login successful!");
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 500);
+      setTimeout(() => navigate("/dashboard"), 500);
     } catch (error) {
       setMessage(
-        error.response?.data?.message ||
-          "Login failed. Please check your credentials."
+        error.message || "Login failed. Please check your credentials."
       );
     } finally {
       setIsLoading(false);

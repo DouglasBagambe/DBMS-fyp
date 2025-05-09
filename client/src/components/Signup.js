@@ -1,9 +1,10 @@
 /* eslint-disable no-unused-vars */
 // src/components/Signup.js
 
-import React, { useState } from "react";
-import axios from "axios";
+import React, { useState, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { signup } from "../utils/api";
+import { AuthContext } from "../context/AuthContext";
 import "../styles/Auth.css";
 
 const Signup = () => {
@@ -13,6 +14,7 @@ const Signup = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { login: authLogin } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -20,7 +22,6 @@ const Signup = () => {
     setIsLoading(true);
     setMessage("");
 
-    // Validate passwords match
     if (password !== confirmPassword) {
       setMessage("Passwords do not match");
       setIsLoading(false);
@@ -28,20 +29,12 @@ const Signup = () => {
     }
 
     try {
-      const res = await axios.post("http://localhost:3000/api/auth/signup", {
-        name,
-        email,
-        password,
-      });
+      const { user, token } = await signup({ name, email, password });
+      authLogin(user, token);
       setMessage("Signup successful! Redirecting to dashboard...");
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1000);
+      setTimeout(() => navigate("/dashboard"), 1000);
     } catch (error) {
-      setMessage(
-        error.response?.data?.message ||
-          "Signup failed. Please check your details."
-      );
+      setMessage(error.message || "Signup failed. Please check your details.");
     } finally {
       setIsLoading(false);
     }
