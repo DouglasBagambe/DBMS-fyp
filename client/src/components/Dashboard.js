@@ -1,13 +1,15 @@
+/* eslint-disable no-unused-vars */
 /* eslint-disable no-undef */
 // src/components/Dashboard.js
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import { AuthContext } from "../context/AuthContext";
 import "../styles/Dashboard.css";
 import Header from "../components/Header";
 
 const Dashboard = () => {
+  const { user } = useContext(AuthContext);
   const [dashboardData, setDashboardData] = useState({
     totalTrips: 142,
     safeDrivingPercentage: 92,
@@ -42,43 +44,16 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      setLoading(true);
-      try {
-        // Replace with your actual API endpoint
-        const response = await axios.get("/api/dashboard");
-        setDashboardData(response.data);
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-        setError("Failed to load dashboard data. Using sample data instead.");
-        // Keep using the sample data if API fails
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // Fetch data on initial load
-    fetchDashboardData();
-
-    // Set up interval for real-time updates (every 30 seconds)
-    const intervalId = setInterval(fetchDashboardData, 30000);
-
-    // Clean up interval on component unmount
-    return () => clearInterval(intervalId);
-  }, []);
-
   const getSeverityColor = (severity) => {
     switch (severity.toLowerCase()) {
       case "high":
-        return "#d9534f"; // Red
+        return "#d9534f";
       case "medium":
-        return "#f0ad4e"; // Yellow/Orange
+        return "#f0ad4e";
       case "low":
-        return "#5cb85c"; // Green
+        return "#5cb85c";
       default:
-        return "#5cb85c"; // Default green
+        return "#5cb85c";
     }
   };
 
