@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 // src/components/Dashboard.js
 
 import React, { useState, useEffect } from "react";
@@ -95,7 +96,9 @@ const Dashboard = () => {
           <p>Real-time monitoring for safer roads in Uganda</p>
         </div>
         <div className="dashboard-meta">
-          <div className="user-info">Welcome, Fleet Manager</div>
+          <div className="user-info">
+            Welcome, {user?.name || "Fleet Manager"}
+          </div>
           <div className="current-date">{getCurrentDate()}</div>
         </div>
       </header>
