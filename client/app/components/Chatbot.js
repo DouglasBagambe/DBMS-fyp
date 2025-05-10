@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import React, { useState, useEffect, useRef } from "react";
 import {
   MessageCircle,
@@ -102,6 +103,8 @@ const nlpProcessor = {
       ],
       privacy: [
         "privacy",
+        "secure",
+        "confidential",
         "secure",
         "confidential",
         "protect",
@@ -244,73 +247,6 @@ const responseDatabase = {
   },
 };
 
-// Message bubble component with typing animation and rich formatting
-const MessageBubble = ({ message }) => {
-  const [displayText, setDisplayText] = useState("");
-  const [isTyping, setIsTyping] = useState(message.role === "bot");
-
-  useEffect(() => {
-    if (message.role === "bot" && isTyping) {
-      let i = 0;
-      const typingSpeed = 15; // milliseconds per character
-      const interval = setInterval(() => {
-        if (i < message.text.length) {
-          setDisplayText(message.text.substring(0, i + 1));
-          i++;
-        } else {
-          clearInterval(interval);
-          setIsTyping(false);
-        }
-      }, typingSpeed);
-
-      return () => clearInterval(interval);
-    }
-  }, [message, isTyping]);
-
-  return (
-    <div
-      className={`relative p-4 rounded-2xl shadow ${
-        message.role === "user"
-          ? "bg-gradient-to-br from-blue-500 to-blue-700 text-white ml-auto"
-          : "bg-gradient-to-br from-gray-50 to-gray-200 text-gray-800"
-      } max-w-[90%] mb-4`}
-    >
-      {message.role === "bot" && message.icon && (
-        <div className="absolute -left-2 -top-2 bg-white p-1 rounded-full shadow">
-          {message.icon}
-        </div>
-      )}
-      {message.role === "user" && (
-        <div className="absolute -right-2 -top-2 bg-blue-600 p-1 rounded-full shadow">
-          <User className="w-4 h-4 text-white" />
-        </div>
-      )}
-      <div className="whitespace-pre-line">
-        {message.role === "bot" && isTyping ? displayText : message.text}
-        {message.role === "bot" && isTyping && (
-          <span className="inline-block animate-pulse">▌</span>
-        )}
-      </div>
-      <div className="text-xs opacity-70 text-right mt-1">
-        {message.timestamp}
-      </div>
-    </div>
-  );
-};
-
-// Topic suggestion button with icon
-const SuggestionButton = ({ icon, label, onClick }) => {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center px-3 py-2 bg-white hover:bg-gray-50 rounded-full shadow hover:shadow-md transition-all duration-300 text-sm font-medium text-gray-700 border border-gray-200"
-    >
-      {icon}
-      <span className="ml-2 truncate">{label}</span>
-    </button>
-  );
-};
-
 // Custom Target icon since it's not in lucide-react
 const Target = ({ className }) => (
   <svg
@@ -338,9 +274,13 @@ const Chatbot = ({ isOpen, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [activeTopic, setActiveTopic] = useState(null);
+  const [expandedMode, setExpandedMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const chatContainerRef = useRef(null);
 
   // Format current timestamp
   const getTimestamp = () => {
@@ -358,7 +298,9 @@ const Chatbot = ({ isOpen, onClose }) => {
 
     // Focus input field when chat opens
     if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+      setTimeout(() => {
+        inputRef.current.focus();
+      }, 100);
     }
   }, [isOpen, chatMessages]);
 
@@ -375,11 +317,31 @@ const Chatbot = ({ isOpen, onClose }) => {
         },
       ]);
       setShowSuggestions(true);
+
+      // Check user's preferred color scheme
+      if (
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches
+      ) {
+        setDarkMode(true);
+      }
+
+      // Add event listener for resize to adjust mobile view
+      const handleResize = () => {
+        const isMobile = window.innerWidth < 768;
+        if (isMobile) {
+          setExpandedMode(true);
+        }
+      };
+
+      handleResize();
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
     }
   }, [isOpen]);
 
   const handleChatSend = (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     if (!userInput.trim() || isLoading) return;
 
     setIsLoading(true);
@@ -408,13 +370,20 @@ const Chatbot = ({ isOpen, onClose }) => {
       setChatMessages((prev) => [...prev, botResponse]);
       setIsLoading(false);
 
-      // Show suggestions again after bot responds
+      // Show suggestions again after bot responds but with a delay
       setTimeout(() => {
         setShowSuggestions(true);
-      }, 1000);
+      }, 1500);
     }, 800); // Slight delay to simulate processing
 
     setUserInput("");
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleChatSend();
+    }
   };
 
   const handleSuggestionClick = (topic) => {
@@ -430,6 +399,8 @@ const Chatbot = ({ isOpen, onClose }) => {
       failure: "How do I report a system failure?",
       privacy: "How is driver privacy protected?",
       performance: "What's the system's detection accuracy?",
+      team: "Who developed this system?",
+      mission: "What's the purpose of DBMS?",
     };
 
     setUserInput(topicQuestions[topic] || "");
@@ -481,80 +452,310 @@ const Chatbot = ({ isOpen, onClose }) => {
               { topic: "team", label: "Development team" },
             ];
             break;
-          // Add more context-specific suggestions
+          case "logs":
+            suggestions = [
+              { topic: "data", label: "Data storage" },
+              { topic: "privacy", label: "Access permissions" },
+              { topic: "performance", label: "System speed" },
+            ];
+            break;
+          case "team":
+            suggestions = [
+              { topic: "mission", label: "Project purpose" },
+              { topic: "performance", label: "System capabilities" },
+              { topic: "privacy", label: "Data handling" },
+            ];
+            break;
+          case "mission":
+            suggestions = [
+              { topic: "team", label: "Meet the team" },
+              { topic: "distractions", label: "Detection capabilities" },
+              { topic: "performance", label: "System accuracy" },
+            ];
+            break;
+          default:
+            suggestions = [
+              { topic: "installation", label: "Installation" },
+              { topic: "distractions", label: "Distractions" },
+              { topic: "team", label: "Development team" },
+            ];
         }
       }
     }
 
-    return suggestions;
+    return suggestions.slice(0, 3); // Limit to 3 suggestions for mobile-friendliness
+  };
+
+  const toggleChatExpansion = () => {
+    setExpandedMode(!expandedMode);
+  };
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+
+  const toggleSettings = () => {
+    setShowSettings(!showSettings);
   };
 
   if (!isOpen) return null;
 
+  // Determine size classes based on expanded mode and screen size
+  const chatSizeClasses = expandedMode
+    ? "fixed inset-0 md:inset-auto md:bottom-4 md:right-4 md:w-112 md:h-144"
+    : "fixed bottom-4 right-4 w-80 h-96 md:w-96 md:h-128";
+
+  // Dynamic theme classes
+  const themeClasses = darkMode
+    ? "bg-gray-900 text-gray-200"
+    : "bg-white text-gray-800";
+
+  const headerClasses = darkMode
+    ? "bg-gradient-to-r from-blue-800 to-indigo-900 text-white"
+    : "bg-gradient-to-r from-blue-600 to-indigo-700 text-white";
+
+  const inputBgClasses = darkMode
+    ? "bg-gray-800 border-gray-700 text-gray-200 focus:ring-blue-600"
+    : "bg-white border-gray-300 text-gray-800 focus:ring-blue-500";
+
+  const suggestionsClasses = darkMode
+    ? "bg-gray-800 border-gray-700"
+    : "bg-gray-50 border-gray-200";
+
+  const buttonHoverClasses = darkMode
+    ? "hover:bg-gray-700"
+    : "hover:bg-gray-100";
+
+  const chatBgClasses = darkMode
+    ? "bg-gradient-to-b from-gray-900 to-gray-800"
+    : "bg-gradient-to-b from-slate-50 to-gray-100";
+
   return (
-    <div className="fixed bottom-4 right-4 w-96 h-[32rem] bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 z-50 flex flex-col overflow-hidden transition-all duration-300">
+    <div
+      className={`${chatSizeClasses} ${themeClasses} rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 z-50 flex flex-col overflow-hidden transition-all duration-300 ease-in-out`}
+    >
       {/* Header */}
-      <div className="flex justify-between items-center p-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
-        <h3 className="text-lg font-bold flex items-center">
-          <MessageCircle className="w-5 h-5 mr-2" />
-          DBMS Assistant
-        </h3>
+      <div
+        className={`flex justify-between items-center p-3 ${headerClasses} sticky top-0`}
+      >
         <div className="flex items-center space-x-2">
-          <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-green-400"></span>
-          <span className="text-xs text-green-200">Online</span>
+          <img
+            src="/dbms-logo1.svg"
+            alt="DBMS Logo"
+            className="w-8 h-8 rounded-lg"
+          />
+          <h3 className="text-lg font-bold">DBMS Assistant</h3>
+        </div>
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1">
+            <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-green-400"></span>
+            <span className="text-xs text-green-200 hidden md:inline">
+              Online
+            </span>
+          </div>
+
+          <button
+            onClick={toggleSettings}
+            className={`text-white p-1.5 rounded-full transition-all ${buttonHoverClasses}`}
+            aria-label="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={toggleChatExpansion}
+            className={`text-white p-1.5 rounded-full transition-all ${buttonHoverClasses}`}
+            aria-label="Toggle chat size"
+          >
+            {expandedMode ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="lucide lucide-minimize-2"
+              >
+                <polyline points="4 14 10 14 10 20"></polyline>
+                <polyline points="20 10 14 10 14 4"></polyline>
+                <line x1="14" y1="10" x2="21" y2="3"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="lucide lucide-maximize-2"
+              >
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+            )}
+          </button>
+
           <button
             onClick={onClose}
-            className="ml-2 text-white hover:bg-blue-700/50 p-1 rounded-full"
+            className={`text-white p-1.5 rounded-full transition-all ${buttonHoverClasses}`}
+            aria-label="Close chat"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-        {chatMessages.map((msg, index) => (
-          <MessageBubble key={index} message={msg} />
-        ))}
-        {isLoading && (
-          <div className="flex items-center space-x-2 p-2 text-gray-500 dark:text-gray-400">
-            <div className="flex space-x-1">
+      {/* Settings Panel (conditionally rendered) */}
+      {showSettings && (
+        <div
+          className={`p-3 border-b ${
+            darkMode ? "border-gray-700" : "border-gray-200"
+          }`}
+        >
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-2">
               <div
-                className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
-                style={{ animationDelay: "0ms" }}
-              ></div>
-              <div
-                className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
-                style={{ animationDelay: "150ms" }}
-              ></div>
-              <div
-                className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
-                style={{ animationDelay: "300ms" }}
-              ></div>
+                className={`p-1 rounded ${
+                  darkMode ? "bg-gray-700" : "bg-gray-100"
+                }`}
+              >
+                <Cpu className="w-4 h-4 text-blue-500" />
+              </div>
+              <span className="text-sm font-medium">Chat Settings</span>
             </div>
-            <span className="text-sm">DBot is typing...</span>
+            <button
+              onClick={toggleSettings}
+              className={`p-1 rounded-full ${
+                darkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"
+              }`}
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-        )}
-        <div ref={messagesEndRef} />
+
+          <div className="mt-2 space-y-2">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-yellow-500"
+                >
+                  <circle cx="12" cy="12" r="5"></circle>
+                  <line x1="12" y1="1" x2="12" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="23"></line>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                  <line x1="1" y1="12" x2="3" y2="12"></line>
+                  <line x1="21" y1="12" x2="23" y2="12"></line>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <span className="text-xs">Dark Mode</span>
+              </div>
+              <button
+                onClick={toggleDarkMode}
+                className={`w-11 h-6 flex items-center rounded-full p-1 ${
+                  darkMode ? "bg-blue-600" : "bg-gray-300"
+                } transition-colors duration-300 focus:outline-none`}
+              >
+                <div
+                  className={`bg-white w-4 h-4 rounded-full shadow transform transition-transform duration-300 ${
+                    darkMode ? "translate-x-5" : "translate-x-0"
+                  }`}
+                ></div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Messages */}
+      <div
+        ref={chatContainerRef}
+        className={`flex-1 overflow-y-auto p-3 ${chatBgClasses} scroll-smooth relative`}
+      >
+        <div className="max-w-4xl mx-auto">
+          {chatMessages.map((msg, index) => (
+            <MessageBubble key={index} message={msg} darkMode={darkMode} />
+          ))}
+          {isLoading && (
+            <div
+              className={`flex items-center space-x-2 p-2 ${
+                darkMode ? "text-gray-400" : "text-gray-500"
+              }`}
+            >
+              <div className="flex space-x-1">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    darkMode ? "bg-gray-500" : "bg-gray-400"
+                  } animate-bounce`}
+                  style={{ animationDelay: "0ms" }}
+                ></div>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    darkMode ? "bg-gray-500" : "bg-gray-400"
+                  } animate-bounce`}
+                  style={{ animationDelay: "150ms" }}
+                ></div>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    darkMode ? "bg-gray-500" : "bg-gray-400"
+                  } animate-bounce`}
+                  style={{ animationDelay: "300ms" }}
+                ></div>
+              </div>
+              <span className="text-sm">DBot is typing...</span>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
-      {/* Suggestions */}
+      {/* Suggestions (Collapsible on mobile) */}
       {showSuggestions && !isLoading && (
-        <div className="px-4 py-2 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            Suggested topics:
-          </p>
-          <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
+        <div
+          className={`px-3 py-2 ${suggestionsClasses} border-t overflow-hidden transition-all duration-300 ease-in-out`}
+        >
+          <div className="flex justify-between items-center mb-1">
+            <p
+              className={`text-xs ${
+                darkMode ? "text-gray-400" : "text-gray-500"
+              }`}
+            >
+              Suggested topics:
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1 pb-1">
             {getSuggestions().map((suggestion, index) => (
               <SuggestionButton
                 key={index}
                 icon={
                   responseDatabase[suggestion.topic]?.icon || (
-                    <HelpCircle className="w-4 h-4" />
+                    <HelpCircle className="w-3 h-3" />
                   )
                 }
                 label={suggestion.label}
                 onClick={() => handleSuggestionClick(suggestion.topic)}
+                darkMode={darkMode}
               />
             ))}
           </div>
@@ -564,7 +765,9 @@ const Chatbot = ({ isOpen, onClose }) => {
       {/* Input Form */}
       <form
         onSubmit={handleChatSend}
-        className="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700"
+        className={`p-3 ${themeClasses} border-t ${
+          darkMode ? "border-gray-700" : "border-gray-200"
+        }`}
       >
         <div className="flex items-center space-x-2">
           <input
@@ -572,18 +775,26 @@ const Chatbot = ({ isOpen, onClose }) => {
             type="text"
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Ask me about DBMS..."
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={`flex-1 px-4 py-2 border rounded-full ${inputBgClasses} focus:outline-none focus:ring-2 transition-all duration-200`}
           />
           <button
             type="submit"
             disabled={isLoading || !userInput.trim()}
-            className="p-2 bg-gradient-to-r from-blue-500 to-blue-700 text-white rounded-full hover:from-blue-600 hover:to-blue-800 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`p-2 bg-gradient-to-r from-blue-500 to-blue-700 text-white rounded-full hover:from-blue-600 hover:to-blue-800 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95 ${
+              !userInput.trim() ? "" : "animate-pulse"
+            }`}
+            aria-label="Send message"
           >
             <Send className="w-5 h-5" />
           </button>
         </div>
-        <div className="text-xs text-center text-gray-400 mt-2">
+        <div
+          className={`text-xs text-center mt-2 ${
+            darkMode ? "text-gray-500" : "text-gray-400"
+          } font-light`}
+        >
           Powered by DBMS - Driver Behavior Monitoring System
         </div>
       </form>
@@ -591,30 +802,162 @@ const Chatbot = ({ isOpen, onClose }) => {
   );
 };
 
+// Updated Message Bubble component with improved styling and dark mode support
+const MessageBubble = ({ message, darkMode }) => {
+  const [displayText, setDisplayText] = useState("");
+  const [isTyping, setIsTyping] = useState(message.role === "bot");
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  useEffect(() => {
+    if (message.role === "bot" && isTyping) {
+      let i = 0;
+      const typingSpeed = 10; // faster typing
+      const interval = setInterval(() => {
+        if (i < message.text.length) {
+          setDisplayText(message.text.substring(0, i + 1));
+          i++;
+        } else {
+          clearInterval(interval);
+          setIsTyping(false);
+        }
+      }, typingSpeed);
+
+      return () => clearInterval(interval);
+    }
+  }, [message, isTyping]);
+
+  // Check if message is long enough to need expansion
+  const isLongMessage = message.text.length > 300;
+
+  // Get bubble gradient based on role and dark mode
+  const getBubbleClasses = () => {
+    if (message.role === "user") {
+      return darkMode
+        ? "bg-gradient-to-br from-blue-700 to-blue-900 text-white ml-auto"
+        : "bg-gradient-to-br from-blue-500 to-blue-700 text-white ml-auto";
+    } else {
+      return darkMode
+        ? "bg-gradient-to-br from-gray-800 to-gray-900 text-gray-100"
+        : "bg-gradient-to-br from-gray-50 to-gray-200 text-gray-800";
+    }
+  };
+
+  return (
+    <div
+      className={`relative p-3 rounded-2xl shadow-lg ${getBubbleClasses()} max-w-[90%] mb-3 transition-all duration-300`}
+    >
+      {message.role === "bot" && message.icon && (
+        <div
+          className={`absolute -left-1.5 -top-1.5 ${
+            darkMode ? "bg-gray-800" : "bg-white"
+          } p-1.5 rounded-full shadow-md`}
+        >
+          {message.icon}
+        </div>
+      )}
+      {message.role === "user" && (
+        <div className="absolute -right-1.5 -top-1.5 bg-blue-700 p-1.5 rounded-full shadow-md">
+          <User className="w-3 h-3 text-white" />
+        </div>
+      )}
+      <div
+        className={`whitespace-pre-line ${
+          isLongMessage && !isExpanded
+            ? "max-h-48 overflow-hidden relative"
+            : ""
+        }`}
+      >
+        {message.role === "bot" && isTyping ? displayText : message.text}
+        {message.role === "bot" && isTyping && (
+          <span className="inline-block animate-pulse">▌</span>
+        )}
+
+        {/* Gradient overlay for long messages */}
+        {isLongMessage && !isExpanded && (
+          <div
+            className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${
+              message.role === "user"
+                ? darkMode
+                  ? "from-blue-800"
+                  : "from-blue-600"
+                : darkMode
+                ? "from-gray-800"
+                : "from-gray-100"
+            } to-transparent`}
+          ></div>
+        )}
+      </div>
+
+      {/* Expand button for long messages */}
+      {isLongMessage && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`text-xs mt-1 font-medium ${
+            message.role === "user"
+              ? "text-blue-200"
+              : darkMode
+              ? "text-gray-400"
+              : "text-gray-500"
+          } hover:underline flex items-center`}
+        >
+          {isExpanded ? "Show less" : "Read more"}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`ml-1 transform transition-transform ${
+              isExpanded ? "rotate-180" : ""
+            }`}
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      )}
+
+      <div
+        className={`text-xs opacity-70 text-right mt-1 ${
+          message.role === "user"
+            ? "text-blue-100"
+            : darkMode
+            ? "text-gray-400"
+            : "text-gray-500"
+        }`}
+      >
+        {message.timestamp}
+      </div>
+    </div>
+  );
+};
+
+// Updated Suggestion Button with improved compact design
+const SuggestionButton = ({ icon, label, onClick, darkMode }) => {
+  return (
+    <button
+      onClick={onClick}
+      className={`group flex items-center px-2 py-1.5 ${
+        darkMode ? "bg-gray-700 hover:bg-gray-600" : "bg-white hover:bg-gray-50"
+      } rounded-lg shadow-sm hover:shadow transition-all duration-200 text-xs font-medium ${
+        darkMode ? "text-gray-200" : "text-gray-700"
+      } border ${
+        darkMode ? "border-gray-600" : "border-gray-200"
+      } transform active:scale-95`}
+    >
+      <div
+        className={`${
+          darkMode ? "text-blue-400" : "text-blue-500"
+        } mr-1.5 transition-all duration-200 group-hover:scale-110`}
+      >
+        {icon}
+      </div>
+      <span className="truncate max-w-[120px]">{label}</span>
+    </button>
+  );
+};
+
 export default Chatbot;
-
-// Demo component wrapper
-// const ChatbotDemo = () => {
-//   const [isOpen, setIsOpen] = useState(true);
-
-//   return (
-//     <div className="relative w-full h-screen bg-gray-100 dark:bg-gray-900 p-4 flex items-center justify-center">
-//       {!isOpen && (
-//         <button
-//           onClick={() => setIsOpen(true)}
-//           className="fixed bottom-6 right-6 p-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center"
-//         >
-//           <MessageCircle className="w-6 h-6" />
-//         </button>
-//       )}
-
-//       <Chatbot isOpen={isOpen} onClose={() => setIsOpen(false)} />
-
-//       <div className="absolute bottom-4 left-4 text-sm text-gray-500 dark:text-gray-400">
-//         Demo: Driver Behavior Monitoring System Chatbot
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default ChatbotDemo;
