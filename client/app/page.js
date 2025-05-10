@@ -44,68 +44,72 @@ function PageContent() {
     updateMetadata(location.pathname);
   }, [isAuthenticated, location, navigate]);
 
-  const updateMetadata = (pathname) => {
-    let title = "DBMS";
-    let description = "Driver Behavior Monitoring System Application";
+  useEffect(() => {
+    const updateMetadata = (pathname) => {
+      let title = "DBMS";
+      let description = "Driver Behavior Monitoring System Application";
 
-    switch (pathname) {
-      case "/":
-        title = "DBMS | Home";
-        description =
-          "Welcome to DBMS - Your Driver Behavior Monitoring Solution";
-        break;
-      case "/login":
-        title = "DBMS | Login";
-        description = "Log in to your DBMS account";
-        break;
-      case "/signup":
-        title = "DBMS | Sign Up";
-        description = "Create a new DBMS account";
-        break;
-      case "/dashboard":
-        title = "DBMS | Dashboard";
-        description = "Your DBMS dashboard overview";
-        break;
-      case "/analytics":
-        title = "DBMS | Analytics";
-        description = "Data analytics and reporting";
-        break;
-      case "/profile":
-        title = "DBMS | Profile";
-        description = "Your user profile";
-        break;
-      case "/support":
-        title = "DBMS | Support";
-        description = "Get help and support for DBMS";
-        break;
-      case "/settings":
-        title = "DBMS | Settings";
-        description = "Manage your account settings";
-        break;
-      case "/notifications":
-        title = "DBMS | Notifications";
-        description = "View your notifications";
-        break;
-      case "/about":
-        title = "DBMS | About";
-        description = "Learn about the Driver Behavior Monitoring System";
-        break;
-      default:
-        title = "DBMS";
-        description = "Driver Behavior Monitoring System Application";
-    }
+      switch (pathname) {
+        case "/":
+          title = "DBMS | Home";
+          description =
+            "Welcome to DBMS - Your Driver Behavior Monitoring Solution";
+          break;
+        case "/login":
+          title = "DBMS | Login";
+          description = "Log in to your DBMS account";
+          break;
+        case "/signup":
+          title = "DBMS | Sign Up";
+          description = "Create a new DBMS account";
+          break;
+        case "/dashboard":
+          title = "DBMS | Dashboard";
+          description = "Your DBMS dashboard overview";
+          break;
+        case "/analytics":
+          title = "DBMS | Analytics";
+          description = "Data analytics and reporting";
+          break;
+        case "/profile":
+          title = "DBMS | Profile";
+          description = "Your user profile";
+          break;
+        case "/support":
+          title = "DBMS | Support";
+          description = "Get help and support for DBMS";
+          break;
+        case "/settings":
+          title = "DBMS | Settings";
+          description = "Manage your account settings";
+          break;
+        case "/notifications":
+          title = "DBMS | Notifications";
+          description = "View your notifications";
+          break;
+        case "/about":
+          title = "DBMS | About";
+          description = "Learn about the Driver Behavior Monitoring System";
+          break;
+        default:
+          title = "DBMS";
+          description = "Driver Behavior Monitoring System Application";
+      }
 
-    document.title = title;
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) {
-      metaDescription.setAttribute("content", description);
-    } else {
-      const meta = document.createElement("meta");
-      meta.name = "description";
-      meta.content = description;
-      document.head.appendChild(meta);
-    }
-  };
+      document.title = title;
+      const metaDescription = document.querySelector(
+        'meta[name="description"]'
+      );
+      if (metaDescription) {
+        metaDescription.setAttribute("content", description);
+      } else {
+        const meta = document.createElement("meta");
+        meta.name = "description";
+        meta.content = description;
+        document.head.appendChild(meta);
+      }
+    };
+  }, []);
 
   return (
     <Routes>
