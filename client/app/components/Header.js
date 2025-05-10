@@ -30,7 +30,9 @@ const Header = () => {
         setShowMobileMenu(false);
       }
     };
-    if (typeof document !== "undefined") {
+
+    // Only add event listener on client-side
+    if (typeof window !== "undefined") {
       document.addEventListener("mousedown", handleClickOutside);
       return () => {
         document.removeEventListener("mousedown", handleClickOutside);
@@ -117,7 +119,7 @@ const Header = () => {
                 Dashboard
               </Link>
               <Link
-                to="/analytic"
+                to="/analytics"
                 className="font-medium text-base text-theme-foreground px-4 py-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200"
               >
                 Analytics
@@ -188,7 +190,7 @@ const Header = () => {
               {showProfileMenu && (
                 <div className="absolute top-12 right-0 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden border border-gray-200 dark:border-gray-700 animate-fade-in-down">
                   <Link
-                    to="/userprofile"
+                    to="/profile"
                     className="block px-4 py-3 text-gray-800 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
                     onClick={() => setShowProfileMenu(false)}
                   >
@@ -259,7 +261,7 @@ const Header = () => {
             <>
               <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
               <Link
-                to="/userprofile"
+                to="/profile"
                 className="block px-4 py-3 text-gray-800 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
                 onClick={() => setShowMobileMenu(false)}
               >

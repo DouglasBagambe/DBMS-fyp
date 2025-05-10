@@ -41,10 +41,18 @@ function PageContent() {
       navigate("/login");
     }
 
-    updateMetadata(location.pathname);
+    // Only run this inside the browser, not during server-side rendering
+    if (typeof window !== "undefined") {
+      updateMetadata(location.pathname);
+    }
   }, [isAuthenticated, location, navigate]);
 
   const updateMetadata = (pathname) => {
+    // Ensure this runs only in the browser environment
+    if (typeof window === "undefined") {
+      return;
+    }
+
     let title = "DBMS";
     let description = "Driver Behavior Monitoring System Application";
 
@@ -94,19 +102,16 @@ function PageContent() {
         title = "DBMS";
         description = "Driver Behavior Monitoring System Application";
     }
-    if (typeof document !== "undefined") {
-      document.title = title;
-      const metaDescription = document.querySelector(
-        'meta[name="description"]'
-      );
-      if (metaDescription) {
-        metaDescription.setAttribute("content", description);
-      } else {
-        const meta = document.createElement("meta");
-        meta.name = "description";
-        meta.content = description;
-        document.head.appendChild(meta);
-      }
+
+    document.title = title;
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute("content", description);
+    } else {
+      const meta = document.createElement("meta");
+      meta.name = "description";
+      meta.content = description;
+      document.head.appendChild(meta);
     }
   };
 
