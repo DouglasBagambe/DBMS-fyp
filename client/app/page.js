@@ -1,3 +1,4 @@
+/* eslint-disable react/display-name */
 "use client";
 
 import { useContext, useEffect } from "react";
@@ -20,128 +21,152 @@ import Notifications from "./components/Notifications";
 import About from "./components/About";
 import { AuthContext } from "./context/AuthContext";
 
+// This ensures the component is only rendered on the client side
+let PageContent;
+
+// Create a Next.js dynamic import component
 export default function Page() {
+  // Use client-side only rendering
+  if (typeof window === "undefined") {
+    return null; // Return null during SSR
+  }
   return <PageContent />;
 }
 
-function PageContent() {
-  const { isAuthenticated } = useContext(AuthContext);
-  const location = useLocation();
-  const navigate = useNavigate();
+// Define PageContent only if we're on the client side
+if (typeof window !== "undefined") {
+  PageContent = function () {
+    const { isAuthenticated } = useContext(AuthContext);
+    const location = useLocation();
+    const navigate = useNavigate();
 
-  useEffect(() => {
-    if (
-      !isAuthenticated &&
-      location.pathname !== "/login" &&
-      location.pathname !== "/signup" &&
-      location.pathname !== "/" &&
-      location.pathname !== "/support" &&
-      location.pathname !== "/about"
-    ) {
-      navigate("/login");
-    }
+    useEffect(() => {
+      if (
+        !isAuthenticated &&
+        location.pathname !== "/login" &&
+        location.pathname !== "/signup" &&
+        location.pathname !== "/" &&
+        location.pathname !== "/support" &&
+        location.pathname !== "/about"
+      ) {
+        navigate("/login");
+      }
 
-    // Only run this inside the browser, not during server-side rendering
-    if (typeof window !== "undefined") {
-      updateMetadata(location.pathname);
-    }
-  }, [isAuthenticated, location, navigate]);
+      // Only run this inside the browser, not during server-side rendering
+      if (typeof window !== "undefined") {
+        updateMetadata(location.pathname);
+      }
+    }, [isAuthenticated, location, navigate]);
 
-  const updateMetadata = (pathname) => {
-    // Ensure this runs only in the browser environment
-    if (typeof window === "undefined") {
-      return;
-    }
+    const updateMetadata = (pathname) => {
+      // Ensure this runs only in the browser environment
+      if (typeof window === "undefined") {
+        return;
+      }
 
-    let title = "DBMS";
-    let description = "Driver Behavior Monitoring System Application";
+      let title = "DBMS";
+      let description = "Driver Behavior Monitoring System Application";
 
-    switch (pathname) {
-      case "/":
-        title = "DBMS | Home";
-        description =
-          "Welcome to DBMS - Your Driver Behavior Monitoring Solution";
-        break;
-      case "/login":
-        title = "DBMS | Login";
-        description = "Log in to your DBMS account";
-        break;
-      case "/signup":
-        title = "DBMS | Sign Up";
-        description = "Create a new DBMS account";
-        break;
-      case "/dashboard":
-        title = "DBMS | Dashboard";
-        description = "Your DBMS dashboard overview";
-        break;
-      case "/analytics":
-        title = "DBMS | Analytics";
-        description = "Data analytics and reporting";
-        break;
-      case "/profile":
-        title = "DBMS | Profile";
-        description = "Your user profile";
-        break;
-      case "/support":
-        title = "DBMS | Support";
-        description = "Get help and support for DBMS";
-        break;
-      case "/settings":
-        title = "DBMS | Settings";
-        description = "Manage your account settings";
-        break;
-      case "/notifications":
-        title = "DBMS | Notifications";
-        description = "View your notifications";
-        break;
-      case "/about":
-        title = "DBMS | About";
-        description = "Learn about the Driver Behavior Monitoring System";
-        break;
-      default:
-        title = "DBMS";
-        description = "Driver Behavior Monitoring System Application";
-    }
+      switch (pathname) {
+        case "/":
+          title = "DBMS | Home";
+          description =
+            "Welcome to DBMS - Your Driver Behavior Monitoring Solution";
+          break;
+        case "/login":
+          title = "DBMS | Login";
+          description = "Log in to your DBMS account";
+          break;
+        case "/signup":
+          title = "DBMS | Sign Up";
+          description = "Create a new DBMS account";
+          break;
+        case "/dashboard":
+          title = "DBMS | Dashboard";
+          description = "Your DBMS dashboard overview";
+          break;
+        case "/analytics":
+          title = "DBMS | Analytics";
+          description = "Data analytics and reporting";
+          break;
+        case "/profile":
+          title = "DBMS | Profile";
+          description = "Your user profile";
+          break;
+        case "/support":
+          title = "DBMS | Support";
+          description = "Get help and support for DBMS";
+          break;
+        case "/settings":
+          title = "DBMS | Settings";
+          description = "Manage your account settings";
+          break;
+        case "/notifications":
+          title = "DBMS | Notifications";
+          description = "View your notifications";
+          break;
+        case "/about":
+          title = "DBMS | About";
+          description = "Learn about the Driver Behavior Monitoring System";
+          break;
+        default:
+          title = "DBMS";
+          description = "Driver Behavior Monitoring System Application";
+      }
 
-    document.title = title;
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) {
-      metaDescription.setAttribute("content", description);
-    } else {
-      const meta = document.createElement("meta");
-      meta.name = "description";
-      meta.content = description;
-      document.head.appendChild(meta);
-    }
+      try {
+        // Use an additional safety check before accessing document
+        if (typeof document !== "undefined") {
+          document.title = title;
+          const metaDescription = document.querySelector(
+            'meta[name="description"]'
+          );
+          if (metaDescription) {
+            metaDescription.setAttribute("content", description);
+          } else {
+            const meta = document.createElement("meta");
+            meta.name = "description";
+            meta.content = description;
+            document.head.appendChild(meta);
+          }
+        }
+      } catch (error) {
+        console.error("Error updating metadata:", error);
+      }
+    };
+
+    return (
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route
+          path="/dashboard"
+          element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/analytics"
+          element={
+            isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />
+          }
+        />
+        <Route
+          path="/profile"
+          element={isAuthenticated ? <UserProfile /> : <Navigate to="/login" />}
+        />
+        <Route path="/support" element={<Support />} />
+        <Route
+          path="/settings"
+          element={isAuthenticated ? <Settings /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/notifications"
+          element={
+            isAuthenticated ? <Notifications /> : <Navigate to="/login" />
+          }
+        />
+        <Route path="/about" element={<About />} />
+      </Routes>
+    );
   };
-
-  return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route
-        path="/dashboard"
-        element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
-      />
-      <Route
-        path="/analytics"
-        element={isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />}
-      />
-      <Route
-        path="/profile"
-        element={isAuthenticated ? <UserProfile /> : <Navigate to="/login" />}
-      />
-      <Route path="/support" element={<Support />} />
-      <Route
-        path="/settings"
-        element={isAuthenticated ? <Settings /> : <Navigate to="/login" />}
-      />
-      <Route
-        path="/notifications"
-        element={isAuthenticated ? <Notifications /> : <Navigate to="/login" />}
-      />
-      <Route path="/about" element={<About />} />
-    </Routes>
-  );
-}
+} // Close the PageContent function that was conditionally defined
