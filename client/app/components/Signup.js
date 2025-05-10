@@ -4,12 +4,26 @@ import React, { useState, useContext, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signup } from "../utils/api";
 import { AuthContext } from "../context/AuthContext";
+import {
+  User,
+  Mail,
+  Lock,
+  Shield,
+  Check,
+  X,
+  Phone,
+  Building,
+} from "lucide-react";
 
 const Signup = () => {
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [company, setCompany] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [gender, setGender] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -40,12 +54,40 @@ const Signup = () => {
   // Calculate form completion progress
   useEffect(() => {
     let progress = 0;
-    if (name) progress += 25;
-    if (email) progress += 25;
-    if (password) progress += 25;
-    if (confirmPassword && confirmPassword === password) progress += 25;
+    const requiredFields = [
+      firstName,
+      lastName,
+      email,
+      password,
+      confirmPassword,
+      gender,
+    ];
+    const totalRequiredFields = requiredFields.length;
+
+    // Count filled required fields
+    const filledRequiredFields = requiredFields.filter((field) => field).length;
+
+    // Add progress for required fields
+    progress += (filledRequiredFields / totalRequiredFields) * 80;
+
+    // Add extra progress for optional fields
+    if (company) progress += 10;
+    if (phoneNumber) progress += 10;
+
+    // Ensure maximum is 100%
+    progress = Math.min(progress, 100);
+
     setFormProgress(progress);
-  }, [name, email, password, confirmPassword]);
+  }, [
+    firstName,
+    lastName,
+    email,
+    password,
+    confirmPassword,
+    company,
+    phoneNumber,
+    gender,
+  ]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,7 +101,15 @@ const Signup = () => {
     }
 
     try {
-      const { user, token } = await signup({ name, email, password });
+      const { user, token } = await signup({
+        firstName,
+        lastName,
+        email,
+        password,
+        company,
+        phoneNumber,
+        gender,
+      });
       authLogin(user, token);
       setMessage("Signup successful! Redirecting to dashboard...");
       setTimeout(() => navigate("/dashboard"), 1000);
@@ -122,64 +172,65 @@ const Signup = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="mb-5 space-y-6">
-            <div className="group">
-              <label
-                htmlFor="name"
-                className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
-              >
-                Full Name
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  id="name"
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 pl-10 border border-gray-200 dark:border-gray-700 rounded-md text-base bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:outline-none transition-all duration-300"
-                />
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* First Name */}
+              <div className="group">
+                <label
+                  htmlFor="firstName"
+                  className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  First Name*
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="firstName"
+                    placeholder="First name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 pl-10 border border-gray-200 dark:border-gray-700 rounded-md text-base bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:outline-none transition-all duration-300"
                   />
-                </svg>
-                {name && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  </div>
-                )}
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  {firstName && (
+                    <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                  )}
+                </div>
+              </div>
+
+              {/* Last Name */}
+              <div className="group">
+                <label
+                  htmlFor="lastName"
+                  className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
+                >
+                  Last Name*
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="lastName"
+                    placeholder="Last name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 pl-10 border border-gray-200 dark:border-gray-700 rounded-md text-base bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:outline-none transition-all duration-300"
+                  />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  {lastName && (
+                    <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                  )}
+                </div>
               </div>
             </div>
 
+            {/* Email */}
             <div className="group">
               <label
                 htmlFor="email"
                 className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
               >
-                Email
+                Email*
               </label>
               <div className="relative">
                 <input
@@ -191,47 +242,169 @@ const Signup = () => {
                   required
                   className="w-full px-4 py-3 pl-10 border border-gray-200 dark:border-gray-700 rounded-md text-base bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:outline-none transition-all duration-300"
                 />
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                  />
-                </svg>
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 {email && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  </div>
+                  <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
                 )}
               </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Company (Optional) */}
+              <div className="group">
+                <label
+                  htmlFor="company"
+                  className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
+                >
+                  Company/Fleet (Optional)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="company"
+                    placeholder="Your company"
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    className="w-full px-4 py-3 pl-10 border border-gray-200 dark:border-gray-700 rounded-md text-base bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:outline-none transition-all duration-300"
+                  />
+                  <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  {company && (
+                    <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                  )}
+                </div>
+              </div>
+
+              {/* Phone Number (Optional) */}
+              <div className="group">
+                <label
+                  htmlFor="phoneNumber"
+                  className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
+                >
+                  Phone Number (Optional)
+                </label>
+                <div className="relative">
+                  <input
+                    type="tel"
+                    id="phoneNumber"
+                    placeholder="Your phone number"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="w-full px-4 py-3 pl-10 border border-gray-200 dark:border-gray-700 rounded-md text-base bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:outline-none transition-all duration-300"
+                  />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  {phoneNumber && (
+                    <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Gender */}
+            <div className="group">
+              <label
+                htmlFor="gender"
+                className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
+              >
+                Gender*
+              </label>
+              <div className="grid grid-cols-3 gap-4">
+                <div
+                  className={`border rounded-md px-4 py-3 cursor-pointer transition-all ${
+                    gender === "male"
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20"
+                      : "border-gray-200 dark:border-gray-700"
+                  }`}
+                  onClick={() => setGender("male")}
+                >
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="radio"
+                      id="male"
+                      name="gender"
+                      checked={gender === "male"}
+                      onChange={() => setGender("male")}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="male"
+                      className={`cursor-pointer w-full text-center font-medium ${
+                        gender === "male"
+                          ? "text-blue-500"
+                          : "text-theme-foreground"
+                      }`}
+                    >
+                      Male
+                    </label>
+                  </div>
+                </div>
+                <div
+                  className={`border rounded-md px-4 py-3 cursor-pointer transition-all ${
+                    gender === "female"
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20"
+                      : "border-gray-200 dark:border-gray-700"
+                  }`}
+                  onClick={() => setGender("female")}
+                >
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="radio"
+                      id="female"
+                      name="gender"
+                      checked={gender === "female"}
+                      onChange={() => setGender("female")}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="female"
+                      className={`cursor-pointer w-full text-center font-medium ${
+                        gender === "female"
+                          ? "text-blue-500"
+                          : "text-theme-foreground"
+                      }`}
+                    >
+                      Female
+                    </label>
+                  </div>
+                </div>
+                <div
+                  className={`border rounded-md px-4 py-3 cursor-pointer transition-all ${
+                    gender === "rather_not_say"
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20"
+                      : "border-gray-200 dark:border-gray-700"
+                  }`}
+                  onClick={() => setGender("rather_not_say")}
+                >
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="radio"
+                      id="rather_not_say"
+                      name="gender"
+                      checked={gender === "rather_not_say"}
+                      onChange={() => setGender("rather_not_say")}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="rather_not_say"
+                      className={`cursor-pointer w-full text-center font-medium ${
+                        gender === "rather_not_say"
+                          ? "text-blue-500"
+                          : "text-theme-foreground"
+                      }`}
+                    >
+                      Rather not say
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Password */}
             <div className="group">
               <label
                 htmlFor="password"
                 className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
               >
-                Password
+                Password*
               </label>
               <div className="relative">
                 <input
@@ -243,20 +416,7 @@ const Signup = () => {
                   required
                   className="w-full px-4 py-3 pl-10 border border-gray-200 dark:border-gray-700 rounded-md text-base bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:outline-none transition-all duration-300"
                 />
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                  />
-                </svg>
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               </div>
 
               {/* Password strength indicator */}
@@ -296,12 +456,13 @@ const Signup = () => {
               )}
             </div>
 
+            {/* Confirm Password */}
             <div className="group">
               <label
                 htmlFor="confirmPassword"
                 className="block mb-2 font-medium text-theme-foreground transition-all duration-300 group-focus-within:text-blue-500"
               >
-                Confirm Password
+                Confirm Password*
               </label>
               <div className="relative">
                 <input
@@ -313,52 +474,13 @@ const Signup = () => {
                   required
                   className="w-full px-4 py-3 pl-10 border border-gray-200 dark:border-gray-700 rounded-md text-base bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:outline-none transition-all duration-300"
                 />
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                  />
-                </svg>
+                <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 {confirmPassword && (
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
                     {confirmPassword === password ? (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-5 w-5 text-green-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
+                      <Check className="h-5 w-5 text-green-500" />
                     ) : (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-5 w-5 text-red-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
+                      <X className="h-5 w-5 text-red-500" />
                     )}
                   </div>
                 )}

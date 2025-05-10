@@ -1,208 +1,460 @@
-/* eslint-disable react/jsx-no-undef */
-// src/components/UserProfile.js
+/* eslint-disable react-hooks/exhaustive-deps */
+// src/components/UserProfile.jsx
 
 "use client";
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import Header from "./Header";
-import { Eye, XCircle } from "lucide-react";
+import React, { useState, useEffect, useContext } from "react";
+import {
+  getUserProfile,
+  updateUserProfile,
+  getVehicles,
+  addVehicle,
+  updateVehicle,
+  deleteVehicle,
+  getDrivers,
+  addDriver,
+  updateDriver,
+  deleteDriver,
+  getDashboardMetrics,
+} from "../utils/api";
+import { AuthContext } from "../context/AuthContext";
+import {
+  UserCircle,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
 
 const UserProfile = () => {
+  const { user, updateUserData, getUserFullName } = useContext(AuthContext);
   const [profileForm, setProfileForm] = useState({
-    name: "Simon Barisigara",
-    email: "simonbarisigara@gmail.com",
-    phone: "0783221677",
-    company: "Kira Motors Corporation",
+    firstName: "",
+    lastName: "",
+    email: "",
+    phoneNumber: "",
+    company: "",
+    gender: "",
   });
-
-  const [vehicles, setVehicles] = useState([
-    {
-      vehicleNumber: "UG1234A",
-      type: "Bus",
-      driver: "John Doe",
-      status: "Active",
-      lastTrip: "2025-03-18 14:32",
-    },
-    {
-      vehicleNumber: "UG5678B",
-      type: "Taxi",
-      driver: "Jane Smith",
-      status: "Inactive",
-      lastTrip: "2025-03-17 09:15",
-    },
-    {
-      vehicleNumber: "UG9012C",
-      type: "Lorry",
-      driver: "Unassigned",
-      status: "Maintenance",
-      lastTrip: "2025-03-16 11:45",
-    },
-  ]);
-
-  const [drivers, setDrivers] = useState([
-    {
-      name: "John Doe",
-      id: "D001",
-      vehicle: "UG1234A",
-      incidents: 2,
-      score: 85,
-    },
-    {
-      name: "Jane Smith",
-      id: "D002",
-      vehicle: "UG5678B",
-      incidents: 1,
-      score: 90,
-    },
-    {
-      name: "Michael Brown",
-      id: "D003",
-      vehicle: "None",
-      incidents: 0,
-      score: 95,
-    },
-  ]);
-
+  const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [metrics, setMetrics] = useState({
-    totalVehicles: 5,
-    activeDrivers: 3,
-    incidents: 4,
+    vehicles: 0,
+    activeDrivers: 0,
+    recentIncidents: 0,
   });
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState("");
-
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [currentVehicle, setCurrentVehicle] = useState(null);
   const [currentDriver, setCurrentDriver] = useState(null);
-
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
-
   const [vehicleForm, setVehicleForm] = useState({
     vehicleNumber: "",
     type: "Bus",
-    driver: "Unassigned",
+    driverId: null,
     status: "Active",
   });
-
   const [driverForm, setDriverForm] = useState({
     name: "",
-    id: "",
-    vehicle: "None",
+    driverId: "",
+    vehicleId: null,
   });
 
-  useEffect(() => {
-    setLoading(true);
-    setTimeout(() => setLoading(false), 800);
-  }, []);
-
-  const handleProfileChange = (e) =>
-    setProfileForm({ ...profileForm, [e.target.name]: e.target.value });
-  const handlePasswordChange = (e) =>
-    setPasswordForm({ ...passwordForm, [e.target.name]: e.target.value });
-  const handleVehicleChange = (e) =>
-    setVehicleForm({ ...vehicleForm, [e.target.name]: e.target.value });
-  const handleDriverChange = (e) =>
-    setDriverForm({ ...driverForm, [e.target.name]: e.target.value });
-
-  const handleProfileSubmit = (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      setSuccessMessage("Profile updated successfully");
-      setTimeout(() => setSuccessMessage(""), 3000);
-      setLoading(false);
-    }, 1000);
+  // Get current date for header
+  const getCurrentDate = () => {
+    const date = new Date();
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
   };
 
-  const handlePasswordSubmit = (e) => {
+  // Fetch user profile, vehicles, drivers, and metrics
+  useEffect(() => {
+    // Create data cache for this component
+    const dataCache = {
+      profileLoaded: false,
+      vehiclesLoaded: false,
+      driversLoaded: false,
+      metricsLoaded: false,
+    };
+
+    const fetchData = async () => {
+      // Skip if already loading
+      if (loading) return;
+
+      setLoading(true);
+
+      try {
+        // Only fetch what we need based on cache state
+        const fetchPromises = [];
+
+        // User profile - only fetch if not already loaded
+        if (
+          !dataCache.profileLoaded &&
+          (!profileForm.firstName || !profileForm.email)
+        ) {
+          fetchPromises.push(
+            getUserProfile()
+              .then((userData) => {
+                if (userData && userData.user) {
+                  setProfileForm({
+                    firstName: userData.user.first_name || "",
+                    lastName: userData.user.last_name || "",
+                    email: userData.user.email || "",
+                    phoneNumber: userData.user.phone_number || "",
+                    company: userData.user.company || "",
+                    gender: userData.user.gender || "",
+                  });
+                  updateUserData(userData.user);
+                  dataCache.profileLoaded = true;
+                }
+              })
+              .catch((err) => {
+                console.error("Error fetching user profile:", err);
+                // Continue with other fetches
+              })
+          );
+        }
+
+        // Vehicles - only fetch if not already loaded
+        if (!dataCache.vehiclesLoaded && (!vehicles || vehicles.length === 0)) {
+          fetchPromises.push(
+            getVehicles()
+              .then((vehicleData) => {
+                if (vehicleData && vehicleData.vehicles) {
+                  setVehicles(
+                    vehicleData.vehicles.map((v) => ({
+                      id: v.id,
+                      vehicleNumber: v.vehicle_number,
+                      type: v.type,
+                      driver: v.driver,
+                      driverId: v.driver_id,
+                      status: v.status,
+                      lastTrip: v.last_trip
+                        ? new Date(v.last_trip).toLocaleString()
+                        : "Never",
+                    }))
+                  );
+                  dataCache.vehiclesLoaded = true;
+                }
+              })
+              .catch((err) => {
+                console.error("Error fetching vehicles:", err);
+                // Continue with other fetches
+              })
+          );
+        }
+
+        // Drivers - only fetch if not already loaded
+        if (!dataCache.driversLoaded && (!drivers || drivers.length === 0)) {
+          fetchPromises.push(
+            getDrivers()
+              .then((driverData) => {
+                if (driverData && driverData.drivers) {
+                  setDrivers(
+                    driverData.drivers.map((d) => ({
+                      id: d.id,
+                      driverId: d.driver_id,
+                      name: d.name,
+                      vehicle: d.vehicle,
+                      vehicleId: d.vehicle === "None" ? null : d.vehicle,
+                      incidents: d.incidents,
+                      score: d.safety_score,
+                    }))
+                  );
+                  dataCache.driversLoaded = true;
+                }
+              })
+              .catch((err) => {
+                console.error("Error fetching drivers:", err);
+                // Continue with other fetches
+              })
+          );
+        }
+
+        // Metrics - only fetch if not already loaded
+        if (!dataCache.metricsLoaded && (!metrics || !metrics.vehicles)) {
+          fetchPromises.push(
+            getDashboardMetrics()
+              .then((metricsData) => {
+                if (metricsData) {
+                  setMetrics({
+                    vehicles: metricsData.vehicles,
+                    activeDrivers: metricsData.activeDrivers,
+                    recentIncidents: metricsData.recentIncidents,
+                  });
+                  dataCache.metricsLoaded = true;
+                }
+              })
+              .catch((err) => {
+                console.error("Error fetching metrics:", err);
+                // Continue with other fetches
+              })
+          );
+        }
+
+        // Wait for all fetches to complete (handles individual errors already)
+        await Promise.allSettled(fetchPromises);
+      } catch (err) {
+        console.error("Error in main fetch data flow:", err);
+        setError(err.message || "Failed to load data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Use existing user data if available before fetching
+    if (user && !dataCache.profileLoaded) {
+      setProfileForm({
+        firstName: user.first_name || "",
+        lastName: user.last_name || "",
+        email: user.email || "",
+        phoneNumber: user.phone_number || "",
+        company: user.company || "",
+        gender: user.gender || "",
+      });
+      dataCache.profileLoaded = true;
+    }
+
+    // Only fetch data once on mount or when user changes
+    fetchData();
+
+    // This effect should only run on mount and when user changes
+  }, [user, updateUserData]);
+
+  const handleProfileChange = (e) => {
+    setProfileForm({ ...profileForm, [e.target.name]: e.target.value });
+  };
+
+  const handlePasswordChange = (e) => {
+    setPasswordForm({ ...passwordForm, [e.target.name]: e.target.value });
+  };
+
+  const handleVehicleChange = (e) => {
+    setVehicleForm({ ...vehicleForm, [e.target.name]: e.target.value });
+  };
+
+  const handleDriverChange = (e) => {
+    setDriverForm({ ...driverForm, [e.target.name]: e.target.value });
+  };
+
+  const handleProfileSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await updateUserProfile({
+        firstName: profileForm.firstName,
+        lastName: profileForm.lastName,
+        company: profileForm.company,
+        phoneNumber: profileForm.phoneNumber,
+        gender: profileForm.gender,
+      });
+      if (response && response.user) {
+        updateUserData(response.user);
+        setSuccessMessage("Profile updated successfully");
+        setTimeout(() => setSuccessMessage(""), 3000);
+      }
+    } catch (err) {
+      console.error("Error updating profile:", err);
+      setError(err.message || "Failed to update profile");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setError("New passwords don't match");
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      setShowPasswordModal(false);
-      setPasswordForm({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-      setSuccessMessage("Password updated successfully");
-      setTimeout(() => setSuccessMessage(""), 3000);
+    try {
+      // Note: Password change API not implemented in provided api.js
+      // Simulating API call for now
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setPasswordForm({
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
+        setSuccessMessage("Password updated successfully");
+        setTimeout(() => setSuccessMessage(""), 3000);
+        setLoading(false);
+      }, 1000);
+    } catch (err) {
+      setError(err.message || "Failed to update password");
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  const handleVehicleSubmit = (e) => {
+  const handleVehicleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setError(null);
+    try {
       if (currentVehicle) {
-        setVehicles(
-          vehicles.map((v) =>
-            v.vehicleNumber === currentVehicle.vehicleNumber
-              ? { ...vehicleForm, lastTrip: currentVehicle.lastTrip }
-              : v
-          )
-        );
+        // Update existing vehicle
+        const response = await updateVehicle(currentVehicle.id, {
+          type: vehicleForm.type,
+          status: vehicleForm.status,
+          driverId:
+            vehicleForm.driverId === "Unassigned" ? null : vehicleForm.driverId,
+        });
+        if (response && response.vehicle) {
+          setVehicles(
+            vehicles.map((v) =>
+              v.id === response.vehicle.id
+                ? {
+                    id: response.vehicle.id,
+                    vehicleNumber: response.vehicle.vehicle_number,
+                    type: response.vehicle.type,
+                    driver: response.vehicle.driver,
+                    driverId: response.vehicle.driver_id,
+                    status: response.vehicle.status,
+                    lastTrip: response.vehicle.last_trip
+                      ? new Date(response.vehicle.last_trip).toLocaleString()
+                      : "Never",
+                  }
+                : v
+            )
+          );
+        }
       } else {
-        setVehicles([...vehicles, { ...vehicleForm, lastTrip: "Never" }]);
-        setMetrics({ ...metrics, totalVehicles: metrics.totalVehicles + 1 });
+        // Add new vehicle
+        const response = await addVehicle({
+          vehicleNumber: vehicleForm.vehicleNumber,
+          type: vehicleForm.type,
+          status: vehicleForm.status,
+          driverId:
+            vehicleForm.driverId === "Unassigned" ? null : vehicleForm.driverId,
+        });
+        if (response && response.vehicle) {
+          setVehicles([
+            ...vehicles,
+            {
+              id: response.vehicle.id,
+              vehicleNumber: response.vehicle.vehicle_number,
+              type: response.vehicle.type,
+              driver: response.vehicle.driver,
+              driverId: response.vehicle.driver_id,
+              status: response.vehicle.status,
+              lastTrip: response.vehicle.last_trip
+                ? new Date(response.vehicle.last_trip).toLocaleString()
+                : "Never",
+            },
+          ]);
+          setMetrics({ ...metrics, vehicles: metrics.vehicles + 1 });
+        }
       }
       setShowVehicleModal(false);
       setVehicleForm({
         vehicleNumber: "",
         type: "Bus",
-        driver: "Unassigned",
+        driverId: null,
         status: "Active",
       });
       setCurrentVehicle(null);
       setSuccessMessage(
-        `Vehicle ${currentVehicle ? "updated" : "added"} successfully`
+        currentVehicle
+          ? "Vehicle updated successfully"
+          : "Vehicle added successfully"
       );
       setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err) {
+      console.error("Error handling vehicle:", err);
+      setError(err.message || "Failed to process vehicle");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  const handleDriverSubmit = (e) => {
+  const handleDriverSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setError(null);
+    try {
       if (currentDriver) {
-        setDrivers(
-          drivers.map((d) =>
-            d.id === currentDriver.id
-              ? {
-                  ...driverForm,
-                  incidents: currentDriver.incidents,
-                  score: currentDriver.score,
-                }
-              : d
-          )
-        );
+        // Update existing driver
+        const response = await updateDriver(currentDriver.id, {
+          name: driverForm.name,
+          vehicleId:
+            driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
+        });
+        if (response && response.driver) {
+          setDrivers(
+            drivers.map((d) =>
+              d.id === response.driver.id
+                ? {
+                    id: response.driver.id,
+                    driverId: response.driver.driver_id,
+                    name: response.driver.name,
+                    vehicle: response.driver.vehicle,
+                    vehicleId:
+                      response.driver.vehicle === "None"
+                        ? null
+                        : response.driver.vehicle,
+                    incidents: response.driver.incidents,
+                    score: response.driver.safety_score,
+                  }
+                : d
+            )
+          );
+        }
       } else {
-        setDrivers([...drivers, { ...driverForm, incidents: 0, score: 100 }]);
-        setMetrics({ ...metrics, activeDrivers: metrics.activeDrivers + 1 });
+        // Add new driver
+        const response = await addDriver({
+          name: driverForm.name,
+          driverId: driverForm.driverId,
+          vehicleId:
+            driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
+        });
+        if (response && response.driver) {
+          setDrivers([
+            ...drivers,
+            {
+              id: response.driver.id,
+              driverId: response.driver.driver_id,
+              name: response.driver.name,
+              vehicle: response.driver.vehicle,
+              vehicleId:
+                response.driver.vehicle === "None"
+                  ? null
+                  : response.driver.vehicle,
+              incidents: response.driver.incidents,
+              score: response.driver.safety_score,
+            },
+          ]);
+          setMetrics({ ...metrics, activeDrivers: metrics.activeDrivers + 1 });
+        }
       }
       setShowDriverModal(false);
-      setDriverForm({ name: "", id: "", vehicle: "None" });
+      setDriverForm({ name: "", driverId: "", vehicleId: null });
       setCurrentDriver(null);
       setSuccessMessage(
-        `Driver ${currentDriver ? "updated" : "added"} successfully`
+        currentDriver
+          ? "Driver updated successfully"
+          : "Driver added successfully"
       );
       setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err) {
+      console.error("Error handling driver:", err);
+      setError(err.message || "Failed to process driver");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   const handleEditVehicle = (vehicle) => {
@@ -210,49 +462,62 @@ const UserProfile = () => {
     setVehicleForm({
       vehicleNumber: vehicle.vehicleNumber,
       type: vehicle.type,
-      driver: vehicle.driver,
+      driverId: vehicle.driverId || "Unassigned",
       status: vehicle.status,
     });
     setShowVehicleModal(true);
   };
 
-  const handleRemoveVehicle = (vehicleNumber) => {
+  const handleRemoveVehicle = async (vehicleId) => {
     if (!window.confirm("Are you sure you want to remove this vehicle?"))
       return;
     setLoading(true);
-    setTimeout(() => {
-      setVehicles(vehicles.filter((v) => v.vehicleNumber !== vehicleNumber));
-      setMetrics({ ...metrics, totalVehicles: metrics.totalVehicles - 1 });
+    setError(null);
+    try {
+      await deleteVehicle(vehicleId);
+      setVehicles(vehicles.filter((v) => v.id !== vehicleId));
+      setMetrics({ ...metrics, vehicles: metrics.vehicles - 1 });
       setSuccessMessage("Vehicle removed successfully");
       setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err) {
+      console.error("Error removing vehicle:", err);
+      setError(err.message || "Failed to remove vehicle");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   const handleEditDriver = (driver) => {
     setCurrentDriver(driver);
     setDriverForm({
       name: driver.name,
-      id: driver.id,
-      vehicle: driver.vehicle,
+      driverId: driver.driverId,
+      vehicleId: driver.vehicleId || "None",
     });
     setShowDriverModal(true);
   };
 
-  const handleRemoveDriver = (driverId) => {
+  const handleRemoveDriver = async (driverId) => {
     if (!window.confirm("Are you sure you want to remove this driver?")) return;
     setLoading(true);
-    setTimeout(() => {
+    setError(null);
+    try {
+      await deleteDriver(driverId);
       setDrivers(drivers.filter((d) => d.id !== driverId));
       setMetrics({ ...metrics, activeDrivers: metrics.activeDrivers - 1 });
       setSuccessMessage("Driver removed successfully");
       setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err) {
+      console.error("Error removing driver:", err);
+      setError(err.message || "Failed to remove driver");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  const getScoreColor = (score) =>
-    score >= 90 ? "#2e7d32" : score >= 70 ? "#f9a825" : "#d9534f";
+  const getScoreColor = (score) => {
+    return score >= 90 ? "#2e7d32" : score >= 70 ? "#9a8250" : "#d9534f";
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -260,17 +525,29 @@ const UserProfile = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
           <div className="mb-4 md:mb-0">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Fleet Manager Profile
+              Driver Behavior Monitoring
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Manage your account and fleet operations
+              Real-time monitoring for safer roads in Uganda
             </p>
           </div>
-          <div className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 font-medium">
-            <span>Welcome, {profileForm.name}</span>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              Last Login: March 18, 2025, 09:15 AM
-            </span>
+          <div className="flex flex-col items-end">
+            <div className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 font-medium">
+              <UserCircle className="w-5 h-5" />
+              <span>
+                {user
+                  ? user.gender === "male"
+                    ? `Mr. ${user.first_name} ${user.last_name}`
+                    : user.gender === "female"
+                    ? `Ms. ${user.first_name} ${user.last_name}`
+                    : getUserFullName()
+                  : "Fleet Manager"}
+              </span>
+            </div>
+            <div className="flex items-center mt-1 text-gray-500 dark:text-gray-400 text-sm">
+              <Clock className="w-4 h-4 mr-1" />
+              <span>{getCurrentDate()}</span>
+            </div>
           </div>
         </div>
 
@@ -280,7 +557,6 @@ const UserProfile = () => {
             <p className="text-gray-600 dark:text-gray-400">Loading data...</p>
           </div>
         )}
-
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 mb-6 rounded-md">
             <div className="flex items-center">
@@ -310,12 +586,25 @@ const UserProfile = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Name
+                    First Name
                   </label>
                   <input
                     type="text"
-                    name="name"
-                    value={profileForm.name}
+                    name="firstName"
+                    value={profileForm.firstName}
+                    onChange={handleProfileChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    name="lastName"
+                    value={profileForm.lastName}
                     onChange={handleProfileChange}
                     required
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
@@ -331,8 +620,12 @@ const UserProfile = () => {
                     value={profileForm.email}
                     onChange={handleProfileChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 bg-gray-100 dark:bg-gray-700"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Email cannot be changed
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -340,25 +633,40 @@ const UserProfile = () => {
                   </label>
                   <input
                     type="tel"
-                    name="phone"
-                    value={profileForm.phone}
+                    name="phoneNumber"
+                    value={profileForm.phoneNumber}
                     onChange={handleProfileChange}
-                    required
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Company/Fleet Name
+                    Company
                   </label>
                   <input
                     type="text"
                     name="company"
                     value={profileForm.company}
                     onChange={handleProfileChange}
-                    required
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Gender
+                  </label>
+                  <select
+                    name="gender"
+                    value={profileForm.gender}
+                    onChange={handleProfileChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="rather_not_say">Rather not say</option>
+                  </select>
                 </div>
               </div>
               <div className="flex justify-end gap-4">
@@ -391,7 +699,7 @@ const UserProfile = () => {
                   Total Vehicles
                 </h3>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {metrics.totalVehicles}
+                  {metrics.vehicles}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Registered in system
@@ -413,7 +721,7 @@ const UserProfile = () => {
                   Incidents This Week
                 </h3>
                 <p className="text-3xl font-bold text-red-600 dark:text-red-400">
-                  {metrics.incidents}
+                  {metrics.recentIncidents}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Safety violations
@@ -436,7 +744,7 @@ const UserProfile = () => {
                   setVehicleForm({
                     vehicleNumber: "",
                     type: "Bus",
-                    driver: "Unassigned",
+                    driverId: null,
                     status: "Active",
                   });
                   setShowVehicleModal(true);
@@ -474,7 +782,7 @@ const UserProfile = () => {
                   {vehicles.length > 0 ? (
                     vehicles.map((vehicle) => (
                       <tr
-                        key={vehicle.vehicleNumber}
+                        key={vehicle.id}
                         className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                       >
                         <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-200">
@@ -510,9 +818,7 @@ const UserProfile = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() =>
-                              handleRemoveVehicle(vehicle.vehicleNumber)
-                            }
+                            onClick={() => handleRemoveVehicle(vehicle.id)}
                             className="px-2 py-1 text-red-600 hover:text-red-700 text-sm font-medium"
                           >
                             Remove
@@ -544,7 +850,7 @@ const UserProfile = () => {
               <button
                 onClick={() => {
                   setCurrentDriver(null);
-                  setDriverForm({ name: "", id: "", vehicle: "None" });
+                  setDriverForm({ name: "", driverId: "", vehicleId: null });
                   setShowDriverModal(true);
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
@@ -587,7 +893,7 @@ const UserProfile = () => {
                           {driver.name}
                         </td>
                         <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-                          {driver.id}
+                          {driver.driverId}
                         </td>
                         <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
                           {driver.vehicle}
@@ -735,7 +1041,7 @@ const UserProfile = () => {
                     value={vehicleForm.vehicleNumber}
                     onChange={handleVehicleChange}
                     required
-                    disabled={currentVehicle}
+                    disabled={!!currentVehicle}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
@@ -760,14 +1066,14 @@ const UserProfile = () => {
                     Driver Assigned
                   </label>
                   <select
-                    name="driver"
-                    value={vehicleForm.driver}
+                    name="driverId"
+                    value={vehicleForm.driverId || "Unassigned"}
                     onChange={handleVehicleChange}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   >
                     <option value="Unassigned">Unassigned</option>
                     {drivers.map((driver) => (
-                      <option key={driver.id} value={driver.name}>
+                      <option key={driver.id} value={driver.id}>
                         {driver.name}
                       </option>
                     ))}
@@ -845,11 +1151,11 @@ const UserProfile = () => {
                   </label>
                   <input
                     type="text"
-                    name="id"
-                    value={driverForm.id}
+                    name="driverId"
+                    value={driverForm.driverId}
                     onChange={handleDriverChange}
                     required
-                    disabled={currentDriver}
+                    disabled={!!currentDriver}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
@@ -858,17 +1164,14 @@ const UserProfile = () => {
                     Vehicle Assigned
                   </label>
                   <select
-                    name="vehicle"
-                    value={driverForm.vehicle}
+                    name="vehicleId"
+                    value={driverForm.vehicleId || "None"}
                     onChange={handleDriverChange}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   >
                     <option value="None">None</option>
                     {vehicles.map((vehicle) => (
-                      <option
-                        key={vehicle.vehicleNumber}
-                        value={vehicle.vehicleNumber}
-                      >
+                      <option key={vehicle.id} value={vehicle.id}>
                         {vehicle.vehicleNumber} ({vehicle.type})
                       </option>
                     ))}
