@@ -16,6 +16,9 @@ const Header = () => {
 
   // Close menus when clicking outside
   useEffect(() => {
+    // Only run in browser environment
+    if (typeof window === "undefined") return;
+
     const handleClickOutside = (event) => {
       if (
         profileMenuRef.current &&

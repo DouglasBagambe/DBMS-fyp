@@ -1,8 +1,13 @@
+// next.config.js
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Allow using the BrowserRouter from react-router-dom
+  output: "export", // Use static export
+  distDir: "out", // Match with your Netlify publish directory
+  images: {
+    unoptimized: true, // Required for static export
+  },
   reactStrictMode: true,
-  swcMinify: true,
   eslint: {
     // Don't run ESLint during build for faster builds
     ignoreDuringBuilds: true,
@@ -10,15 +15,6 @@ const nextConfig = {
   typescript: {
     // Don't run TypeScript checking during build for faster builds
     ignoreBuildErrors: true,
-  },
-  // Configure redirects for client-side routing
-  async rewrites() {
-    return [
-      {
-        source: "/:path*",
-        destination: "/",
-      },
-    ];
   },
 };
 

@@ -1,3 +1,5 @@
+// app/not-found.js
+
 /* eslint-disable react/no-unescaped-entities */
 import Link from "next/link";
 

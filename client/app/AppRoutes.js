@@ -1,3 +1,5 @@
+// app/AppRoutes.js
+
 "use client";
 
 import { useContext, useEffect } from "react";
@@ -39,6 +41,9 @@ const AppRoutes = () => {
   }, [isAuthenticated, location.pathname, navigate]);
 
   useEffect(() => {
+    // Only run in browser environment
+    if (typeof window === "undefined") return;
+
     // Update page metadata safely on the client side only
     const updateMetadata = () => {
       let title = "DBMS";
