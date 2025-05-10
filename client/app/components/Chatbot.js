@@ -277,6 +277,7 @@ const Chatbot = ({ isOpen, onClose }) => {
   const [expandedMode, setExpandedMode] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [suggestionsVisible, setSuggestionsVisible] = useState(true);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -730,37 +731,77 @@ const Chatbot = ({ isOpen, onClose }) => {
         </div>
       </div>
 
-      {/* Suggestions (Collapsible on mobile) */}
-      {showSuggestions && !isLoading && (
-        <div
-          className={`px-3 py-2 ${suggestionsClasses} border-t overflow-hidden transition-all duration-300 ease-in-out`}
-        >
-          <div className="flex justify-between items-center mb-1">
-            <p
-              className={`text-xs ${
-                darkMode ? "text-gray-400" : "text-gray-500"
-              }`}
+      {/* Suggestions (Collapsible with toggle) */}
+      <div className="relative">
+        {showSuggestions && !isLoading && (
+          <div
+            className={`px-3 py-2 ${suggestionsClasses} border-t overflow-hidden transition-all duration-300 ease-in-out`}
+            style={{
+              maxHeight: suggestionsVisible ? "200px" : "0px",
+              opacity: suggestionsVisible ? 1 : 0,
+              paddingTop: suggestionsVisible ? "0.5rem" : 0,
+              paddingBottom: suggestionsVisible ? "0.5rem" : 0,
+            }}
+          >
+            <div className="flex justify-between items-center mb-1">
+              <p
+                className={`text-xs ${
+                  darkMode ? "text-gray-400" : "text-gray-500"
+                }`}
+              >
+                Suggested topics:
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1 pb-1">
+              {getSuggestions().map((suggestion, index) => (
+                <SuggestionButton
+                  key={index}
+                  icon={
+                    responseDatabase[suggestion.topic]?.icon || (
+                      <HelpCircle className="w-3 h-3" />
+                    )
+                  }
+                  label={suggestion.label}
+                  onClick={() => handleSuggestionClick(suggestion.topic)}
+                  darkMode={darkMode}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dropdown Toggle Button */}
+        {showSuggestions && !isLoading && (
+          <button
+            onClick={() => setSuggestionsVisible(!suggestionsVisible)}
+            className={`absolute left-1/2 transform -translate-x-1/2 -bottom-3 w-8 h-8 rounded-full ${
+              darkMode
+                ? "bg-gray-800 text-gray-300 border-gray-700"
+                : "bg-white text-gray-500 border-gray-200"
+            } border flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-300 z-10 group`}
+            aria-label={
+              suggestionsVisible ? "Hide suggestions" : "Show suggestions"
+            }
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`transition-transform duration-300 transform ${
+                suggestionsVisible ? "rotate-180" : ""
+              } group-hover:scale-110`}
             >
-              Suggested topics:
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1 pb-1">
-            {getSuggestions().map((suggestion, index) => (
-              <SuggestionButton
-                key={index}
-                icon={
-                  responseDatabase[suggestion.topic]?.icon || (
-                    <HelpCircle className="w-3 h-3" />
-                  )
-                }
-                label={suggestion.label}
-                onClick={() => handleSuggestionClick(suggestion.topic)}
-                darkMode={darkMode}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+        )}
+      </div>
 
       {/* Input Form */}
       <form
