@@ -95,18 +95,19 @@ function PageContent() {
           title = "DBMS";
           description = "Driver Behavior Monitoring System Application";
       }
-
-      document.title = title;
-      const metaDescription = document.querySelector(
-        'meta[name="description"]'
-      );
-      if (metaDescription) {
-        metaDescription.setAttribute("content", description);
-      } else {
-        const meta = document.createElement("meta");
-        meta.name = "description";
-        meta.content = description;
-        document.head.appendChild(meta);
+      if (typeof document !== "undefined") {
+        document.title = title;
+        const metaDescription = document.querySelector(
+          'meta[name="description"]'
+        );
+        if (metaDescription) {
+          metaDescription.setAttribute("content", description);
+        } else {
+          const meta = document.createElement("meta");
+          meta.name = "description";
+          meta.content = description;
+          document.head.appendChild(meta);
+        }
       }
     };
   }, []);
