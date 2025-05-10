@@ -31,13 +31,10 @@ const Header = () => {
       }
     };
 
-    // Only add event listener on client-side
-    if (typeof window !== "undefined") {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-      };
-    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   // Toggle menus

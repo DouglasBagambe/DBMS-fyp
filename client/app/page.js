@@ -1,172 +1,52 @@
-/* eslint-disable react/display-name */
 "use client";
 
-import { useContext, useEffect } from "react";
-import {
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
-import Home from "./components/Home";
-import Login from "./components/Login";
-import Signup from "./components/Signup";
-import Dashboard from "./components/Dashboard";
-import AnalyticsPage from "./components/Analytic";
-import UserProfile from "./components/UserProfile";
-import Support from "./components/Support";
-import Settings from "./components/Settings";
-import Notifications from "./components/Notifications";
-import About from "./components/About";
-import { AuthContext } from "./context/AuthContext";
+import { useState } from "react";
+import { BrowserRouter as Router } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+import Chatbot from "./components/Chatbot";
+import AppRoutes from "./AppRoutes";
 
-// This ensures the component is only rendered on the client side
-let PageContent;
-
-// Create a Next.js dynamic import component
 export default function Page() {
-  // Use client-side only rendering
-  if (typeof window === "undefined") {
-    return null; // Return null during SSR
-  }
-  return <PageContent />;
-}
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
-// Define PageContent only if we're on the client side
-if (typeof window !== "undefined") {
-  PageContent = function () {
-    const { isAuthenticated } = useContext(AuthContext);
-    const location = useLocation();
-    const navigate = useNavigate();
+  return (
+    <Router>
+      <AuthProvider>
+        <div className="flex flex-col min-h-screen relative">
+          <Header />
+          <main className="flex-grow">
+            <AppRoutes />
+          </main>
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-500 rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center text-white text-xl font-bold z-50"
+            style={{ animation: "pulse 2s infinite" }}
+          >
+            💬
+          </button>
+          <Chatbot isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+          <Footer />
+        </div>
+      </AuthProvider>
 
-    useEffect(() => {
-      if (
-        !isAuthenticated &&
-        location.pathname !== "/login" &&
-        location.pathname !== "/signup" &&
-        location.pathname !== "/" &&
-        location.pathname !== "/support" &&
-        location.pathname !== "/about"
-      ) {
-        navigate("/login");
-      }
-
-      // Only run this inside the browser, not during server-side rendering
-      if (typeof window !== "undefined") {
-        updateMetadata(location.pathname);
-      }
-    }, [isAuthenticated, location, navigate]);
-
-    const updateMetadata = (pathname) => {
-      // Ensure this runs only in the browser environment
-      if (typeof window === "undefined") {
-        return;
-      }
-
-      let title = "DBMS";
-      let description = "Driver Behavior Monitoring System Application";
-
-      switch (pathname) {
-        case "/":
-          title = "DBMS | Home";
-          description =
-            "Welcome to DBMS - Your Driver Behavior Monitoring Solution";
-          break;
-        case "/login":
-          title = "DBMS | Login";
-          description = "Log in to your DBMS account";
-          break;
-        case "/signup":
-          title = "DBMS | Sign Up";
-          description = "Create a new DBMS account";
-          break;
-        case "/dashboard":
-          title = "DBMS | Dashboard";
-          description = "Your DBMS dashboard overview";
-          break;
-        case "/analytics":
-          title = "DBMS | Analytics";
-          description = "Data analytics and reporting";
-          break;
-        case "/profile":
-          title = "DBMS | Profile";
-          description = "Your user profile";
-          break;
-        case "/support":
-          title = "DBMS | Support";
-          description = "Get help and support for DBMS";
-          break;
-        case "/settings":
-          title = "DBMS | Settings";
-          description = "Manage your account settings";
-          break;
-        case "/notifications":
-          title = "DBMS | Notifications";
-          description = "View your notifications";
-          break;
-        case "/about":
-          title = "DBMS | About";
-          description = "Learn about the Driver Behavior Monitoring System";
-          break;
-        default:
-          title = "DBMS";
-          description = "Driver Behavior Monitoring System Application";
-      }
-
-      try {
-        // Use an additional safety check before accessing document
-        if (typeof document !== "undefined") {
-          document.title = title;
-          const metaDescription = document.querySelector(
-            'meta[name="description"]'
-          );
-          if (metaDescription) {
-            metaDescription.setAttribute("content", description);
-          } else {
-            const meta = document.createElement("meta");
-            meta.name = "description";
-            meta.content = description;
-            document.head.appendChild(meta);
+      <style jsx="true">{`
+        @keyframes pulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4);
+          }
+          70% {
+            box-shadow: 0 0 0 10px rgba(79, 70, 229, 0);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(79, 70, 229, 0);
           }
         }
-      } catch (error) {
-        console.error("Error updating metadata:", error);
-      }
-    };
-
-    return (
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route
-          path="/dashboard"
-          element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/analytics"
-          element={
-            isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />
-          }
-        />
-        <Route
-          path="/profile"
-          element={isAuthenticated ? <UserProfile /> : <Navigate to="/login" />}
-        />
-        <Route path="/support" element={<Support />} />
-        <Route
-          path="/settings"
-          element={isAuthenticated ? <Settings /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/notifications"
-          element={
-            isAuthenticated ? <Notifications /> : <Navigate to="/login" />
-          }
-        />
-        <Route path="/about" element={<About />} />
-      </Routes>
-    );
-  };
+        .animate-pulse-slow {
+          animation: pulse 2s infinite;
+        }
+      `}</style>
+    </Router>
+  );
 }
