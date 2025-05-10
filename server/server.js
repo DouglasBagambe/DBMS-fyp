@@ -10,7 +10,7 @@ require("dotenv").config();
 
 // Import routes
 const authRoutes = require("./routes/auth");
-const userRoutes = require("./routes/user");
+// const userRoutes = require("./routes/user");
 const vehicleRoutes = require("./routes/vehicles");
 const driverRoutes = require("./routes/drivers");
 const authenticateToken = require("./middleware/auth");
@@ -45,7 +45,7 @@ app.use(limiter);
 
 // API routes
 app.use("/api/auth", authRoutes);
-app.use("/api/user", userRoutes);
+// app.use("/api/user", userRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/drivers", driverRoutes);
 app.get("/api/dashboard", authenticateToken, (req, res) => {
