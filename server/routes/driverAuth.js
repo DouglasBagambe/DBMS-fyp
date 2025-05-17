@@ -159,14 +159,12 @@ router.post("/logout", async (req, res) => {
 
 // Get driver activity logs
 router.get("/activity-logs", authenticateToken, async (req, res) => {
-  const { driverId } = req.user;
-
   try {
+    const { driverId } = req.user;
     const result = await pool.query(
       "SELECT * FROM driver_activity_logs WHERE driver_id = $1 ORDER BY created_at DESC LIMIT 50",
       [driverId]
     );
-
     res.json(result.rows);
   } catch (error) {
     console.error("Error fetching activity logs:", error);
