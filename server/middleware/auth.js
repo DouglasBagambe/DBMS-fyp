@@ -12,7 +12,14 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+
+    // Handle both user and driver authentication
+    if (decoded.type === "driver") {
+      req.user = decoded;
+    } else {
+      req.userId = decoded.id;
+    }
+
     next();
   } catch (error) {
     return res.status(403).json({ error: "Invalid token" });

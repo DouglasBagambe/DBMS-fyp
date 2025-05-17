@@ -16,7 +16,7 @@ const userRoutes = require("./routes/user");
 const vehicleRoutes = require("./routes/vehicles");
 const driverRoutes = require("./routes/drivers");
 const driverAuthRoutes = require("./routes/driverAuth");
-const authenticateToken = require("./middleware/auth");
+const { authenticateToken } = require("./middleware/auth");
 
 // Create Express app
 const app = express();
