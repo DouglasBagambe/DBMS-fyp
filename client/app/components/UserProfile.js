@@ -64,6 +64,7 @@ const UserProfile = () => {
   const [driverForm, setDriverForm] = useState({
     name: "",
     driverId: "",
+    phoneNumber: "",
     vehicleId: null,
   });
 
@@ -166,10 +167,13 @@ const UserProfile = () => {
                       id: d.id,
                       driverId: d.driver_id,
                       name: d.name,
+                      phoneNumber: d.phone_number,
                       vehicle: d.vehicle,
                       vehicleId: d.vehicle === "None" ? null : d.vehicle,
                       incidents: d.incidents,
                       score: d.safety_score,
+                      passwordChanged: d.password_changed,
+                      lastLogin: d.last_login,
                     }))
                   );
                   dataCache.driversLoaded = true;
@@ -390,8 +394,8 @@ const UserProfile = () => {
         // Update existing driver
         const response = await updateDriver(currentDriver.id, {
           name: driverForm.name,
-          vehicleId:
-            driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
+          phoneNumber: driverForm.phoneNumber,
+          vehicleId: driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
         });
         if (response && response.driver) {
           setDrivers(
@@ -401,13 +405,13 @@ const UserProfile = () => {
                     id: response.driver.id,
                     driverId: response.driver.driver_id,
                     name: response.driver.name,
+                    phoneNumber: response.driver.phone_number,
                     vehicle: response.driver.vehicle,
-                    vehicleId:
-                      response.driver.vehicle === "None"
-                        ? null
-                        : response.driver.vehicle,
+                    vehicleId: response.driver.vehicle === "None" ? null : response.driver.vehicle,
                     incidents: response.driver.incidents,
                     score: response.driver.safety_score,
+                    passwordChanged: response.driver.password_changed,
+                    lastLogin: response.driver.last_login,
                   }
                 : d
             )
@@ -418,8 +422,8 @@ const UserProfile = () => {
         const response = await addDriver({
           name: driverForm.name,
           driverId: driverForm.driverId,
-          vehicleId:
-            driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
+          phoneNumber: driverForm.phoneNumber,
+          vehicleId: driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
         });
         if (response && response.driver) {
           setDrivers([
@@ -428,25 +432,25 @@ const UserProfile = () => {
               id: response.driver.id,
               driverId: response.driver.driver_id,
               name: response.driver.name,
+              phoneNumber: response.driver.phone_number,
               vehicle: response.driver.vehicle,
-              vehicleId:
-                response.driver.vehicle === "None"
-                  ? null
-                  : response.driver.vehicle,
+              vehicleId: response.driver.vehicle === "None" ? null : response.driver.vehicle,
               incidents: response.driver.incidents,
               score: response.driver.safety_score,
+              passwordChanged: response.driver.password_changed,
+              lastLogin: response.driver.last_login,
             },
           ]);
           setMetrics({ ...metrics, activeDrivers: metrics.activeDrivers + 1 });
         }
       }
       setShowDriverModal(false);
-      setDriverForm({ name: "", driverId: "", vehicleId: null });
+      setDriverForm({ name: "", driverId: "", phoneNumber: "", vehicleId: null });
       setCurrentDriver(null);
       setSuccessMessage(
         currentDriver
           ? "Driver updated successfully"
-          : "Driver added successfully"
+          : "Driver added successfully. They can now log in using their Driver ID as the initial password."
       );
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err) {
@@ -492,6 +496,7 @@ const UserProfile = () => {
     setDriverForm({
       name: driver.name,
       driverId: driver.driverId,
+      phoneNumber: driver.phoneNumber,
       vehicleId: driver.vehicleId || "None",
     });
     setShowDriverModal(true);
@@ -850,7 +855,7 @@ const UserProfile = () => {
               <button
                 onClick={() => {
                   setCurrentDriver(null);
-                  setDriverForm({ name: "", driverId: "", vehicleId: null });
+                  setDriverForm({ name: "", driverId: "", phoneNumber: "", vehicleId: null });
                   setShowDriverModal(true);
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
@@ -869,7 +874,16 @@ const UserProfile = () => {
                       Driver ID
                     </th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Phone Number
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       Vehicle Assigned
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Last Login
                     </th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       Incidents
@@ -896,7 +910,26 @@ const UserProfile = () => {
                           {driver.driverId}
                         </td>
                         <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                          {driver.phoneNumber}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
                           {driver.vehicle}
+                        </td>
+                        <td className="px-4 py-2">
+                          <span
+                            className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                              driver.passwordChanged
+                                ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
+                                : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400"
+                            }`}
+                          >
+                            {driver.passwordChanged ? "Active" : "Pending Setup"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                          {driver.lastLogin
+                            ? new Date(driver.lastLogin).toLocaleString()
+                            : "Never"}
                         </td>
                         <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
                           {driver.incidents}
@@ -926,7 +959,7 @@ const UserProfile = () => {
                   ) : (
                     <tr>
                       <td
-                        colSpan="6"
+                        colSpan="9"
                         className="px-4 py-4 text-center text-gray-500 dark:text-gray-400"
                       >
                         No drivers found
@@ -1156,6 +1189,24 @@ const UserProfile = () => {
                     onChange={handleDriverChange}
                     required
                     disabled={!!currentDriver}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  />
+                  {!currentDriver && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      This will be used as the initial password for the driver
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    name="phoneNumber"
+                    value={driverForm.phoneNumber}
+                    onChange={handleDriverChange}
+                    required
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>

@@ -1,20 +1,22 @@
 // app/layout.js
 
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "./context/AuthContext";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "DBMS - Driver Behavior Monitoring System",
-  description:
-    "Monitor and analyze driver behavior with our comprehensive system",
-  icons: {
-    icon: "/dbms-logo1.svg",
-  },
+  title: "DBMS Project",
+  description: "Database Management System Project",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={inter.className}>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
