@@ -142,14 +142,37 @@ router.post("/logout", async (req, res) => {
 router.post("/log-incident", authenticateToken, async (req, res) => {
   try {
     const { driverId } = req.user;
-    const { type, severity, details } = req.body;
+    const { type, severity, details, vehicleId } = req.body;
+
+    // Validate severity is between 1 and 5
+    const severityNum = parseInt(severity);
+    if (isNaN(severityNum) || severityNum < 1 || severityNum > 5) {
+      return res
+        .status(400)
+        .json({ error: "Severity must be a number between 1 and 5" });
+    }
+
+    // Get driver's assigned vehicle if not provided
+    let finalVehicleId = vehicleId;
+    if (!finalVehicleId) {
+      const vehicleResult = await pool.query(
+        "SELECT vehicle_id FROM driver_vehicles WHERE driver_id = $1 AND is_active = true",
+        [driverId]
+      );
+      if (vehicleResult.rows.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "No active vehicle assigned to driver" });
+      }
+      finalVehicleId = vehicleResult.rows[0].vehicle_id;
+    }
 
     const result = await pool.query(
       `INSERT INTO incidents 
-       (driver_id, incident_type, severity, details, incident_date) 
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) 
+       (driver_id, vehicle_id, incident_type, description, severity, incident_date) 
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) 
        RETURNING *`,
-      [driverId, type, severity, details]
+      [driverId, finalVehicleId, type, details, severityNum]
     );
 
     res.status(201).json(result.rows[0]);
@@ -164,9 +187,11 @@ router.get("/incidents", authenticateToken, async (req, res) => {
   try {
     const { driverId } = req.user;
     const result = await pool.query(
-      `SELECT * FROM incidents 
-       WHERE driver_id = $1 
-       ORDER BY incident_date DESC 
+      `SELECT i.*, v.vehicle_number 
+       FROM incidents i
+       LEFT JOIN vehicles v ON i.vehicle_id = v.id
+       WHERE i.driver_id = $1 
+       ORDER BY i.incident_date DESC 
        LIMIT 50`,
       [driverId]
     );
