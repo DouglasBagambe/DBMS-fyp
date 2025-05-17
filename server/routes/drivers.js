@@ -221,11 +221,12 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { vehicleId, incidentType, description, severity } = req.body;
 
-  if (!vehicleId || !incidentType || !severity) {
+  if (!vehicleId || !incidentType) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
-  if (severity < 1 || severity > 5) {
+  // Validate severity if provided
+  if (severity !== undefined && (severity < 1 || severity > 5)) {
     return res.status(400).json({ error: "Severity must be between 1 and 5" });
   }
 
@@ -258,26 +259,26 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
       `INSERT INTO incidents 
         (driver_id, vehicle_id, incident_type, description, severity, incident_date) 
        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
-      [id, vehicleId, incidentType, description, severity]
+      [id, vehicleId, incidentType, description, severity || null]
     );
 
-    // Update driver safety score
-    // Each incident reduces score based on severity
-    const scoreReduction = severity * 2; // Example: severity 1 = -2 points, severity 5 = -10 points
-
-    await pool.query(
-      `UPDATE drivers 
-       SET safety_score = GREATEST(0, safety_score - $1), 
-           updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $2`,
-      [scoreReduction, id]
-    );
+    // Update driver safety score only if severity is provided
+    if (severity) {
+      const scoreReduction = severity * 2; // Example: severity 1 = -2 points, severity 5 = -10 points
+      await pool.query(
+        `UPDATE drivers 
+         SET safety_score = GREATEST(0, safety_score - $1), 
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $2`,
+        [scoreReduction, id]
+      );
+    }
 
     await pool.query("COMMIT");
 
     res.status(201).json({
       message: "Incident recorded successfully",
-      scoreReduction,
+      scoreReduction: severity ? severity * 2 : 0,
     });
   } catch (err) {
     await pool.query("ROLLBACK");

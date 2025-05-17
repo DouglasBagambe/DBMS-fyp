@@ -144,12 +144,15 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
     const { id: driverId } = req.user;
     const { type, severity, details } = req.body;
 
-    // Validate severity is between 1 and 5
-    const severityNum = parseInt(severity);
-    if (isNaN(severityNum) || severityNum < 1 || severityNum > 5) {
-      return res
-        .status(400)
-        .json({ error: "Severity must be a number between 1 and 5" });
+    // Validate severity if provided
+    let severityNum = null;
+    if (severity !== undefined) {
+      severityNum = parseInt(severity);
+      if (isNaN(severityNum) || severityNum < 1 || severityNum > 5) {
+        return res
+          .status(400)
+          .json({ error: "Severity must be a number between 1 and 5" });
+      }
     }
 
     // Get the driver's currently assigned vehicle
@@ -181,6 +184,18 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
        RETURNING *`,
       [driverId, vehicleId, type, details, severityNum]
     );
+
+    // Update driver safety score only if severity is provided
+    if (severityNum) {
+      const scoreReduction = severityNum * 2;
+      await pool.query(
+        `UPDATE drivers 
+         SET safety_score = GREATEST(0, safety_score - $1), 
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $2`,
+        [scoreReduction, driverId]
+      );
+    }
 
     console.log("Incident logged successfully:", result.rows[0]);
     res.status(201).json(result.rows[0]);
