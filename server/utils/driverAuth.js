@@ -56,30 +56,8 @@ const createDriverSession = async (driverId, token, deviceInfo) => {
   }
 };
 
-// Log driver activity
-const logDriverActivity = async (
-  driverId,
-  activityType,
-  description,
-  locationData = null,
-  vehicleId = null
-) => {
-  try {
-    await pool.query(
-      `INSERT INTO driver_activity_logs 
-       (driver_id, activity_type, description, location_data, vehicle_id) 
-       VALUES ($1, $2, $3, $4, $5)`,
-      [driverId, activityType, description, locationData, vehicleId]
-    );
-  } catch (error) {
-    console.error("Error logging activity:", error);
-    throw new Error("Failed to log activity");
-  }
-};
-
 module.exports = {
   setDriverPassword,
   verifyDriverPassword,
   createDriverSession,
-  logDriverActivity,
 };

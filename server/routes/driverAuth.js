@@ -5,7 +5,6 @@ const {
   verifyDriverPassword,
   setDriverPassword,
   createDriverSession,
-  logDriverActivity,
 } = require("../utils/driverAuth");
 const { authenticateToken } = require("../middleware/auth");
 
@@ -109,15 +108,6 @@ router.post("/set-password", async (req, res) => {
 
     // Set new password
     await setDriverPassword(driverId, newPassword);
-
-    // Log password change
-    await logDriverActivity(
-      driver.id,
-      "PASSWORD_CHANGE",
-      "Driver changed password",
-      null,
-      null
-    );
 
     res.json({ message: "Password changed successfully" });
   } catch (error) {
