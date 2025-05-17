@@ -161,6 +161,10 @@ router.post("/logout", async (req, res) => {
 router.get("/activity-logs", authenticateToken, async (req, res) => {
   try {
     const { driverId } = req.user;
+    if (!driverId) {
+      return res.status(403).json({ error: "Not authorized as a driver" });
+    }
+
     const result = await pool.query(
       "SELECT * FROM driver_activity_logs WHERE driver_id = $1 ORDER BY created_at DESC LIMIT 50",
       [driverId]
