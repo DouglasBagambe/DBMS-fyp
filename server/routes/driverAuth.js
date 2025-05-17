@@ -157,22 +157,42 @@ router.post("/logout", async (req, res) => {
   }
 });
 
-// Get driver activity logs
-router.get("/activity-logs", authenticateToken, async (req, res) => {
+// Log driver incident
+router.post("/log-incident", authenticateToken, async (req, res) => {
   try {
     const { driverId } = req.user;
-    if (!driverId) {
-      return res.status(403).json({ error: "Not authorized as a driver" });
-    }
+    const { type, severity, details } = req.body;
 
     const result = await pool.query(
-      "SELECT * FROM driver_activity_logs WHERE driver_id = $1 ORDER BY created_at DESC LIMIT 50",
+      `INSERT INTO incidents 
+       (driver_id, incident_type, severity, details, incident_date) 
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) 
+       RETURNING *`,
+      [driverId, type, severity, details]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Error logging incident:", error);
+    res.status(500).json({ error: "Failed to log incident" });
+  }
+});
+
+// Get driver incidents
+router.get("/incidents", authenticateToken, async (req, res) => {
+  try {
+    const { driverId } = req.user;
+    const result = await pool.query(
+      `SELECT * FROM incidents 
+       WHERE driver_id = $1 
+       ORDER BY incident_date DESC 
+       LIMIT 50`,
       [driverId]
     );
     res.json(result.rows);
   } catch (error) {
-    console.error("Error fetching activity logs:", error);
-    res.status(500).json({ error: "Failed to fetch activity logs" });
+    console.error("Error fetching incidents:", error);
+    res.status(500).json({ error: "Failed to fetch incidents" });
   }
 });
 
