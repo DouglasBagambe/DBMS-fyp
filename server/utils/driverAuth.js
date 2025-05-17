@@ -39,16 +39,16 @@ const verifyDriverPassword = async (driverId, password) => {
 };
 
 // Create driver session
-const createDriverSession = async (driverId, token, deviceInfo) => {
+const createDriverSession = async (driverId, token) => {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 1); // Token valid for 1 day
 
   try {
     await pool.query(
       `INSERT INTO driver_sessions 
-       (driver_id, token, expires_at, device_info) 
-       VALUES ($1, $2, $3, $4)`,
-      [driverId, token, expiresAt, deviceInfo]
+       (driver_id, token, expires_at) 
+       VALUES ($1, $2, $3)`,
+      [driverId, token, expiresAt]
     );
   } catch (error) {
     console.error("Error creating session:", error);

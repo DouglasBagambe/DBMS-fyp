@@ -12,7 +12,7 @@ const router = express.Router();
 
 // Driver login
 router.post("/login", async (req, res) => {
-  const { driverId, password, deviceInfo } = req.body;
+  const { driverId, password } = req.body;
 
   try {
     // Get driver details
@@ -53,7 +53,7 @@ router.post("/login", async (req, res) => {
     );
 
     // Create session
-    await createDriverSession(driver.id, token, deviceInfo);
+    await createDriverSession(driver.id, token);
 
     // Update last login
     await pool.query(
@@ -141,7 +141,7 @@ router.post("/logout", async (req, res) => {
 // Log driver incident
 router.post("/log-incident", authenticateToken, async (req, res) => {
   try {
-    const { driverId } = req.user;
+    const { id: driverId } = req.user;
     const { type, severity, details } = req.body;
 
     // Validate severity is between 1 and 5
@@ -196,7 +196,7 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
 // Get driver incidents
 router.get("/incidents", authenticateToken, async (req, res) => {
   try {
-    const { driverId } = req.user;
+    const { id: driverId } = req.user;
 
     const result = await pool.query(
       `SELECT i.*, v.vehicle_number 
