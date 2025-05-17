@@ -6,6 +6,8 @@ const helmet = require("helmet");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
 const morgan = require("morgan");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpecs = require("./swagger");
 require("dotenv").config();
 
 // Import routes
@@ -22,17 +24,34 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(helmet());
 app.use(compression());
+
+// CORS configuration
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.NODE_ENV === "production"
+    ? "https://dbmsystem.netlify.app/"
+    : "http://localhost:3000",
+];
+
 app.use(
   cors({
-    origin: [
-      process.env.FRONTEND_URL || "*",
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:3002",
-    ],
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg =
+          "The CORS policy for this site does not allow access from the specified Origin.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 app.use(express.json());
 app.use(morgan("dev")); // Log HTTP requests
 
@@ -42,6 +61,9 @@ const limiter = rateLimit({
   max: 100, // Limit each IP to 100 requests per windowMs
 });
 app.use(limiter);
+
+// API Documentation
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
 // API routes
 app.use("/api/auth", authRoutes);
@@ -77,4 +99,12 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(
+    `API Documentation available at ${
+      process.env.NODE_ENV === "production"
+        ? process.env.RENDER_URL
+        : `http://localhost:${PORT}`
+    }/api-docs`
+  );
 });
