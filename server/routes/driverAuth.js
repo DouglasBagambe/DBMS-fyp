@@ -142,7 +142,7 @@ router.post("/logout", async (req, res) => {
 router.post("/log-incident", authenticateToken, async (req, res) => {
   try {
     const { driverId } = req.user;
-    const { type, severity, details, vehicleId } = req.body;
+    const { type, severity, details } = req.body;
 
     // Validate severity is between 1 and 5
     const severityNum = parseInt(severity);
@@ -152,33 +152,44 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
         .json({ error: "Severity must be a number between 1 and 5" });
     }
 
-    // Get driver's assigned vehicle if not provided
-    let finalVehicleId = vehicleId;
-    if (!finalVehicleId) {
-      const vehicleResult = await pool.query(
-        "SELECT vehicle_id FROM driver_vehicles WHERE driver_id = $1 AND is_active = true",
-        [driverId]
-      );
-      if (vehicleResult.rows.length === 0) {
-        return res
-          .status(400)
-          .json({ error: "No active vehicle assigned to driver" });
-      }
-      finalVehicleId = vehicleResult.rows[0].vehicle_id;
+    // Get the driver's currently assigned vehicle
+    const vehicleResult = await pool.query(
+      `SELECT v.id as vehicle_id 
+       FROM vehicles v 
+       JOIN vehicle_driver_assignments vda ON v.id = vda.vehicle_id 
+       WHERE vda.driver_id = $1 
+       AND vda.id = (
+         SELECT MAX(id) 
+         FROM vehicle_driver_assignments 
+         WHERE driver_id = $1
+       )`,
+      [driverId]
+    );
+
+    if (vehicleResult.rows.length === 0) {
+      console.error(`No vehicle assigned to driver ${driverId}`);
+      return res.status(400).json({ error: "No vehicle assigned to driver" });
     }
 
+    const vehicleId = vehicleResult.rows[0].vehicle_id;
+
+    // Log the incident
     const result = await pool.query(
       `INSERT INTO incidents 
        (driver_id, vehicle_id, incident_type, description, severity, incident_date) 
        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) 
        RETURNING *`,
-      [driverId, finalVehicleId, type, details, severityNum]
+      [driverId, vehicleId, type, details, severityNum]
     );
 
+    console.log("Incident logged successfully:", result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error logging incident:", error);
-    res.status(500).json({ error: "Failed to log incident" });
+    res.status(500).json({
+      error: "Failed to log incident",
+      details: error.message,
+    });
   }
 });
 
@@ -186,6 +197,7 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
 router.get("/incidents", authenticateToken, async (req, res) => {
   try {
     const { driverId } = req.user;
+
     const result = await pool.query(
       `SELECT i.*, v.vehicle_number 
        FROM incidents i
@@ -195,10 +207,15 @@ router.get("/incidents", authenticateToken, async (req, res) => {
        LIMIT 50`,
       [driverId]
     );
+
+    console.log(`Found ${result.rows.length} incidents for driver ${driverId}`);
     res.json(result.rows);
   } catch (error) {
     console.error("Error fetching incidents:", error);
-    res.status(500).json({ error: "Failed to fetch incidents" });
+    res.status(500).json({
+      error: "Failed to fetch incidents",
+      details: error.message,
+    });
   }
 });
 
