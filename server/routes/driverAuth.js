@@ -144,6 +144,10 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
     const { id: driverId } = req.user;
     const { type, severity, details } = req.body;
 
+    if (!type) {
+      return res.status(400).json({ error: "Incident type is required" });
+    }
+
     // Validate severity if provided
     let severityNum = null;
     if (severity !== undefined) {
@@ -182,7 +186,7 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
        (driver_id, vehicle_id, incident_type, description, severity, incident_date) 
        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) 
        RETURNING *`,
-      [driverId, vehicleId, type, details, severityNum]
+      [driverId, vehicleId, type, details || null, severityNum]
     );
 
     // Update driver safety score only if severity is provided

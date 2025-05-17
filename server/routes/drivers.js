@@ -221,13 +221,17 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { vehicleId, incidentType, description, severity } = req.body;
 
-  if (!vehicleId || !incidentType) {
-    return res.status(400).json({ error: "Missing required fields" });
+  if (!incidentType) {
+    return res.status(400).json({ error: "Incident type is required" });
   }
 
   // Validate severity if provided
-  if (severity !== undefined && (severity < 1 || severity > 5)) {
-    return res.status(400).json({ error: "Severity must be between 1 and 5" });
+  let severityNum = null;
+  if (severity !== undefined) {
+    severityNum = parseInt(severity);
+    if (isNaN(severityNum) || severityNum < 1 || severityNum > 5) {
+      return res.status(400).json({ error: "Severity must be between 1 and 5" });
+    }
   }
 
   try {
@@ -259,12 +263,12 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
       `INSERT INTO incidents 
         (driver_id, vehicle_id, incident_type, description, severity, incident_date) 
        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
-      [id, vehicleId, incidentType, description, severity || null]
+      [id, vehicleId, incidentType, description || null, severityNum]
     );
 
     // Update driver safety score only if severity is provided
-    if (severity) {
-      const scoreReduction = severity * 2; // Example: severity 1 = -2 points, severity 5 = -10 points
+    if (severityNum) {
+      const scoreReduction = severityNum * 2; // Example: severity 1 = -2 points, severity 5 = -10 points
       await pool.query(
         `UPDATE drivers 
          SET safety_score = GREATEST(0, safety_score - $1), 
@@ -278,7 +282,7 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
 
     res.status(201).json({
       message: "Incident recorded successfully",
-      scoreReduction: severity ? severity * 2 : 0,
+      scoreReduction: severityNum ? severityNum * 2 : 0,
     });
   } catch (err) {
     await pool.query("ROLLBACK");
