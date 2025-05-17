@@ -62,15 +62,6 @@ router.post("/login", async (req, res) => {
       [driver.id]
     );
 
-    // Log login activity
-    await logDriverActivity(
-      driver.id,
-      "LOGIN",
-      "Driver logged in",
-      { device: deviceInfo },
-      null
-    );
-
     res.json({
       token,
       driver: {
