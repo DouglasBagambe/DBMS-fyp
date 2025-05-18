@@ -239,3 +239,4 @@ router.get("/incidents", authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
+ 

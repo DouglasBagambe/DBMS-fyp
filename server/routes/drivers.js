@@ -5,6 +5,53 @@ const jwt = require("jsonwebtoken");
 const pool = require("../config/dbConfig");
 const router = express.Router();
 
+// Helper function to normalize incident types to standard categories
+const normalizeIncidentType = (type) => {
+  if (!type) return "OTHER";
+
+  const upperType = type.toUpperCase();
+
+  // Phone usage detection
+  if (
+    upperType.includes("PHONE") ||
+    upperType.includes("CELL") ||
+    upperType.includes("MOBILE") ||
+    upperType.includes("DISTRACT") ||
+    upperType.includes("TEXT")
+  )
+    return "PHONE_USAGE";
+
+  // Drowsiness detection
+  if (
+    upperType.includes("DROWSI") ||
+    upperType.includes("SLEEP") ||
+    upperType.includes("TIRED") ||
+    upperType.includes("DOZED") ||
+    upperType.includes("FATIGUE")
+  )
+    return "DROWSINESS";
+
+  // Cigarette usage detection
+  if (
+    upperType.includes("CIGAR") ||
+    upperType.includes("SMOK") ||
+    upperType.includes("TOBACCO")
+  )
+    return "CIGARETTE";
+
+  // Seatbelt detection
+  if (
+    upperType.includes("SEAT") ||
+    upperType.includes("BELT") ||
+    upperType.includes("HARNESS") ||
+    upperType.includes("RESTRAINT")
+  )
+    return "SEATBELT";
+
+  // Default to OTHER if no match
+  return "OTHER";
+};
+
 // Auth middleware
 const authenticateToken = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
@@ -339,18 +386,25 @@ router.get("/incidents/count", authenticateToken, async (req, res) => {
   }
 });
 
-// Get driver details
+// Get driver details by ID
 router.get("/:id", authenticateToken, async (req, res) => {
-  const { id } = req.params;
-
   try {
-    // Try to find driver by internal ID first
-    let driverQuery = `
-      SELECT d.id, d.driver_id, d.name, d.safety_score, d.phone_number,
-             COALESCE(v.vehicle_number, 'None') as vehicle,
-             v.id as vehicle_id,
-             (SELECT COUNT(*) FROM incidents WHERE driver_id = d.id) as incidents,
-             d.created_at, d.last_login
+    const { id } = req.params;
+
+    // Get driver details with vehicle and incident information
+    const driverQuery = `
+      SELECT 
+        d.id,
+        d.driver_id,
+        d.name,
+        d.phone_number,
+        d.safety_score,
+        d.created_at,
+        d.last_login,
+        COALESCE(v.vehicle_number, 'None') as vehicle,
+        v.id as vehicle_id,
+        (SELECT COUNT(*) FROM incidents WHERE driver_id = d.id) as incidents,
+        (SELECT COUNT(*) FROM trips WHERE driver_id = d.id) as total_trips
       FROM drivers d
       LEFT JOIN vehicle_driver_assignments vda ON d.id = vda.driver_id AND vda.id = (
         SELECT MAX(id) FROM vehicle_driver_assignments WHERE driver_id = d.id
@@ -359,31 +413,64 @@ router.get("/:id", authenticateToken, async (req, res) => {
       WHERE d.id = $1 AND d.user_id = $2
     `;
 
-    let result = await pool.query(driverQuery, [id, req.userId]);
-
-    // If not found by internal ID, try driver_id
-    if (result.rows.length === 0) {
-      driverQuery = `
-        SELECT d.id, d.driver_id, d.name, d.safety_score, d.phone_number,
-               COALESCE(v.vehicle_number, 'None') as vehicle,
-               v.id as vehicle_id,
-               (SELECT COUNT(*) FROM incidents WHERE driver_id = d.id) as incidents,
-               d.created_at, d.last_login
-        FROM drivers d
-        LEFT JOIN vehicle_driver_assignments vda ON d.id = vda.driver_id AND vda.id = (
-          SELECT MAX(id) FROM vehicle_driver_assignments WHERE driver_id = d.id
-        )
-        LEFT JOIN vehicles v ON vda.vehicle_id = v.id
-        WHERE d.driver_id = $1 AND d.user_id = $2
-      `;
-      result = await pool.query(driverQuery, [id, req.userId]);
-    }
+    const result = await pool.query(driverQuery, [id, req.userId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Driver not found" });
     }
 
-    res.json({ driver: result.rows[0] });
+    // Get recent activity (last 15 incidents)
+    const activityQuery = `
+      SELECT 
+        i.id,
+        i.incident_type,
+        i.description,
+        i.severity,
+        i.incident_date,
+        i.created_at,
+        v.vehicle_number
+      FROM incidents i
+      LEFT JOIN vehicles v ON i.vehicle_id = v.id
+      WHERE i.driver_id = $1
+      ORDER BY i.incident_date DESC NULLS LAST, i.created_at DESC
+      LIMIT 15
+    `;
+
+    const activityResult = await pool.query(activityQuery, [id]);
+
+    // Get the most common incident type
+    const incidentTypeQuery = `
+      SELECT incident_type, COUNT(*) as count
+      FROM incidents
+      WHERE driver_id = $1
+      GROUP BY incident_type
+      ORDER BY count DESC
+      LIMIT 1
+    `;
+
+    const incidentTypeResult = await pool.query(incidentTypeQuery, [id]);
+
+    const driver = result.rows[0];
+
+    // Normalize all incident types in the activity results
+    const incidents_list = activityResult.rows.map((incident) => ({
+      ...incident,
+      // Add a normalized version of the incident type
+      normalized_type: normalizeIncidentType(incident.incident_type),
+    }));
+
+    // Set the driver's primary incident type if available
+    if (incidentTypeResult.rows.length > 0) {
+      driver.incident_type = normalizeIncidentType(
+        incidentTypeResult.rows[0].incident_type
+      );
+    }
+
+    // Add both raw and normalized incident data
+    driver.recent_activity = activityResult.rows;
+    driver.incidents_list = incidents_list;
+
+    res.json({ driver });
   } catch (err) {
     console.error("Get driver details error:", err);
     res.status(500).json({ error: "Internal server error" });
