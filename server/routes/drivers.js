@@ -74,7 +74,7 @@ router.post("/", authenticateToken, async (req, res) => {
       `INSERT INTO drivers 
         (driver_id, name, user_id) 
        VALUES ($1, $2, $3) 
-       RETURNING id, driver_id, name, safety_score`,
+       RETURNING id, driver_id, name`,
       [driverId, name, req.userId]
     );
 
@@ -230,7 +230,9 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
   if (severity !== undefined) {
     severityNum = parseInt(severity);
     if (isNaN(severityNum) || severityNum < 1 || severityNum > 5) {
-      return res.status(400).json({ error: "Severity must be between 1 and 5" });
+      return res
+        .status(400)
+        .json({ error: "Severity must be between 1 and 5" });
     }
   }
 
@@ -333,6 +335,57 @@ router.get("/incidents/count", authenticateToken, async (req, res) => {
     res.json({ count: parseInt(result.rows[0].total) });
   } catch (err) {
     console.error("Get incidents count error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Get driver details
+router.get("/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Try to find driver by internal ID first
+    let driverQuery = `
+      SELECT d.id, d.driver_id, d.name, d.safety_score, d.phone_number,
+             COALESCE(v.vehicle_number, 'None') as vehicle,
+             v.id as vehicle_id,
+             (SELECT COUNT(*) FROM incidents WHERE driver_id = d.id) as incidents,
+             d.created_at, d.last_login
+      FROM drivers d
+      LEFT JOIN vehicle_driver_assignments vda ON d.id = vda.driver_id AND vda.id = (
+        SELECT MAX(id) FROM vehicle_driver_assignments WHERE driver_id = d.id
+      )
+      LEFT JOIN vehicles v ON vda.vehicle_id = v.id
+      WHERE d.id = $1 AND d.user_id = $2
+    `;
+
+    let result = await pool.query(driverQuery, [id, req.userId]);
+
+    // If not found by internal ID, try driver_id
+    if (result.rows.length === 0) {
+      driverQuery = `
+        SELECT d.id, d.driver_id, d.name, d.safety_score, d.phone_number,
+               COALESCE(v.vehicle_number, 'None') as vehicle,
+               v.id as vehicle_id,
+               (SELECT COUNT(*) FROM incidents WHERE driver_id = d.id) as incidents,
+               d.created_at, d.last_login
+        FROM drivers d
+        LEFT JOIN vehicle_driver_assignments vda ON d.id = vda.driver_id AND vda.id = (
+          SELECT MAX(id) FROM vehicle_driver_assignments WHERE driver_id = d.id
+        )
+        LEFT JOIN vehicles v ON vda.vehicle_id = v.id
+        WHERE d.driver_id = $1 AND d.user_id = $2
+      `;
+      result = await pool.query(driverQuery, [id, req.userId]);
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+
+    res.json({ driver: result.rows[0] });
+  } catch (err) {
+    console.error("Get driver details error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
