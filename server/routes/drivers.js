@@ -12,39 +12,21 @@ const normalizeIncidentType = (type) => {
   const upperType = type.toUpperCase();
 
   // Phone usage detection
-  if (
-    upperType.includes("PHONE") ||
-    upperType.includes("CELL") ||
-    upperType.includes("MOBILE") ||
-    upperType.includes("DISTRACT") ||
-    upperType.includes("TEXT")
-  )
+  if (upperType.includes("PHONE") || upperType.includes("Phone"))
     return "PHONE_USAGE";
 
   // Drowsiness detection
-  if (
-    upperType.includes("DROWSI") ||
-    upperType.includes("SLEEP") ||
-    upperType.includes("TIRED") ||
-    upperType.includes("DOZED") ||
-    upperType.includes("FATIGUE")
-  )
+  if (upperType.includes("Sleepy") || upperType.includes("SLEEPY"))
     return "DROWSINESS";
 
   // Cigarette usage detection
-  if (
-    upperType.includes("CIGAR") ||
-    upperType.includes("SMOK") ||
-    upperType.includes("TOBACCO")
-  )
+  if (upperType.includes("CIGARETTE") || upperType.includes("Cigarette"))
     return "CIGARETTE";
 
   // Seatbelt detection
   if (
-    upperType.includes("SEAT") ||
-    upperType.includes("BELT") ||
-    upperType.includes("HARNESS") ||
-    upperType.includes("RESTRAINT")
+    upperType.includes("SEATBELT ABSENCE") ||
+    upperType.includes("Seatbelt Absence")
   )
     return "SEATBELT";
 
