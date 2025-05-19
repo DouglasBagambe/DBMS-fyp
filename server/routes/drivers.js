@@ -7,31 +7,24 @@ const router = express.Router();
 
 // Helper function to normalize incident types to standard categories
 const normalizeIncidentType = (type) => {
-  if (!type) return "OTHER";
+  if (!type) return null;
 
-  const upperType = type.toUpperCase();
+  // Convert to lowercase for case-insensitive matching
+  const lowerType = type.toLowerCase().trim();
 
-  // Phone usage detection
-  if (upperType.includes("PHONE") || upperType.includes("Phone"))
-    return "PHONE_USAGE";
-
-  // Drowsiness detection
-  if (upperType.includes("Sleepy") || upperType.includes("SLEEPY"))
-    return "DROWSINESS";
-
-  // Cigarette usage detection
-  if (upperType.includes("CIGARETTE") || upperType.includes("Cigarette"))
-    return "CIGARETTE";
-
-  // Seatbelt detection
-  if (
-    upperType.includes("SEATBELT ABSENCE") ||
-    upperType.includes("Seatbelt Absence")
-  )
-    return "SEATBELT";
-
-  // Default to OTHER if no match
-  return "OTHER";
+  // Only accept these exact four types (case-insensitive)
+  switch (lowerType) {
+    case "phone":
+      return "PHONE_USAGE";
+    case "sleepy":
+      return "DROWSINESS";
+    case "cigarette":
+      return "CIGARETTE";
+    case "seatbelt absence":
+      return "SEATBELT";
+    default:
+      return null; // Return null for any other type
+  }
 };
 
 // Auth middleware
