@@ -19,7 +19,13 @@ import {
   Phone,
   Moon,
 } from "lucide-react";
-import { getDashboardMetrics, getDrivers, getVehicles } from "../utils/api";
+import {
+  getDashboardMetrics,
+  getDrivers,
+  getVehicles,
+  normalizeIncidentType,
+} from "../utils/api";
+import { useRouter } from "next/navigation";
 
 const Dashboard = () => {
   const { user } = useContext(AuthContext);
@@ -29,21 +35,27 @@ const Dashboard = () => {
     averageScore: 0,
     alerts: [],
   });
+  const [metrics, setMetrics] = useState({
+    activeDrivers: 0,
+    totalVehicles: 0,
+    recentIncidents: 0,
+  });
   const [activityData, setActivityData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const router = useRouter();
 
   // Fetch dashboard metrics, alerts, and activity
   useEffect(() => {
     const fetchData = async () => {
-      // Skip fetching if already loading or data exists
+      // Skip fetching if already loading
       if (loading) return;
 
       setLoading(true);
       setError(null);
       try {
         // Fetch metrics
-        const metrics = await getDashboardMetrics();
+        const metricsData = await getDashboardMetrics();
         const drivers = await getDrivers();
         const vehicles = await getVehicles();
 
@@ -64,30 +76,78 @@ const Dashboard = () => {
             : 0;
 
         // Calculate safe driving percentage (trips without incidents)
-        const incidentCount = metrics.incidentCount || 0;
+        const incidentCount = metricsData.incidentCount || 0;
         const safeDrivingPercentage =
           totalTrips > 0
             ? Math.round(((totalTrips - incidentCount) / totalTrips) * 100)
             : 0;
 
+        // Update metrics state
+        setMetrics({
+          activeDrivers: metricsData.activeDrivers || 0,
+          totalVehicles: metricsData.vehicles || 0,
+          recentIncidents: metricsData.recentIncidents || 0,
+        });
+
         // Simulate alerts based on driver incidents
         const alerts = drivers.drivers
           .filter((driver) => driver.incidents > 0)
-          .map((driver, index) => ({
-            id: index + 1,
-            message: `Driver ${driver.driver_id}: Safety incident detected`,
-            timestamp: new Date().toLocaleTimeString(),
-            severity:
-              driver.incidents > 2
-                ? "high"
-                : driver.incidents > 1
-                ? "medium"
-                : "low",
-            driverId: driver.driver_id,
-            vehicleId: driver.vehicle || "N/A",
-            icon: driver.incidents > 2 ? "phone" : "alert",
-          }))
-          .slice(0, 3); // Limit to 3 alerts for display
+          .map((driver, index) => {
+            // Get standard incident types based on incident history
+            const standardIncidentTypes = [
+              "PHONE_USAGE",
+              "DROWSINESS",
+              "CIGARETTE",
+              "SEATBELT",
+            ];
+            const incidentType = driver.incident_type
+              ? normalizeIncidentType(driver.incident_type)
+              : standardIncidentTypes[index % standardIncidentTypes.length];
+
+            // Determine message and severity based on normalized incident type
+            const getMessage = (type) => {
+              switch (type) {
+                case "PHONE_USAGE":
+                  return "Phone usage detected";
+                case "DROWSINESS":
+                  return "Driver drowsiness detected";
+                case "CIGARETTE":
+                  return "Cigarette usage detected";
+                case "SEATBELT":
+                  return "Seatbelt violation detected";
+                default:
+                  return "Safety violation detected";
+              }
+            };
+
+            const getSeverity = (type) => {
+              switch (type) {
+                case "PHONE_USAGE":
+                  return "high";
+                case "DROWSINESS":
+                  return "high";
+                case "CIGARETTE":
+                  return "medium";
+                case "SEATBELT":
+                  return "medium";
+                default:
+                  return "low";
+              }
+            };
+
+            return {
+              id: index + 1,
+              message: `Driver ${driver.driver_id}: ${getMessage(
+                incidentType
+              )}`,
+              timestamp: new Date().toLocaleTimeString(),
+              severity: getSeverity(incidentType),
+              driverId: driver.driver_id,
+              vehicleId: driver.vehicle || "N/A",
+              type: incidentType.toLowerCase(),
+            };
+          })
+          .slice(0, 3);
 
         // Simulate activity data based on vehicle trips and driver incidents
         const activity = [
@@ -96,18 +156,64 @@ const Dashboard = () => {
             .map((vehicle, index) => ({
               id: `trip-${index}`,
               type: "safe",
-              message: `Vehicle ${vehicle.vehicle_number} completed trip`,
+              message: `Vehicle ${vehicle.vehicle_number} completed trip safely`,
               timestamp: new Date(vehicle.last_trip).toLocaleTimeString(),
             })),
           ...drivers.drivers
             .filter((driver) => driver.incidents > 0)
-            .map((driver, index) => ({
-              id: `incident-${index}`,
-              type: driver.incidents > 2 ? "danger" : "warning",
-              message: `Driver ${driver.driver_id} had ${driver.incidents} incident(s)`,
-              timestamp: new Date().toLocaleTimeString(),
-            })),
-        ].slice(0, 3); // Limit to 3 activities
+            .map((driver, index) => {
+              // Use standardized incident types
+              const standardIncidentTypes = [
+                "PHONE_USAGE",
+                "DROWSINESS",
+                "CIGARETTE",
+                "SEATBELT",
+              ];
+              const incidentType = driver.incident_type
+                ? normalizeIncidentType(driver.incident_type)
+                : standardIncidentTypes[index % standardIncidentTypes.length];
+
+              const getMessage = (type) => {
+                switch (type) {
+                  case "PHONE_USAGE":
+                    return "Phone usage detected";
+                  case "DROWSINESS":
+                    return "Driver drowsiness detected";
+                  case "CIGARETTE":
+                    return "Cigarette usage detected";
+                  case "SEATBELT":
+                    return "Seatbelt violation detected";
+                  default:
+                    return "Safety violation detected";
+                }
+              };
+
+              // Determine severity based on incident type
+              const getSeverity = (type) => {
+                switch (type) {
+                  case "PHONE_USAGE":
+                    return "danger";
+                  case "DROWSINESS":
+                    return "danger";
+                  case "CIGARETTE":
+                    return "warning";
+                  case "SEATBELT":
+                    return "warning";
+                  default:
+                    return "warning";
+                }
+              };
+
+              return {
+                id: `incident-${index}`,
+                type: getSeverity(incidentType),
+                message: `Driver ${driver.driver_id}: ${getMessage(
+                  incidentType
+                )}`,
+                timestamp: new Date().toLocaleTimeString(),
+              };
+            }),
+        ].slice(0, 3);
 
         setDashboardData({
           totalTrips,
@@ -129,12 +235,16 @@ const Dashboard = () => {
     // Empty dependency array ensures it only runs once when component mounts
   }, []);
 
-  const getAlertIcon = (icon) => {
-    switch (icon) {
-      case "phone":
+  const getAlertIcon = (type) => {
+    switch (type) {
+      case "phone_usage":
         return <Phone className="w-5 h-5" />;
-      case "drowsy":
+      case "drowsiness":
         return <Moon className="w-5 h-5" />;
+      case "cigarette":
+        return <AlertTriangle className="w-5 h-5" />;
+      case "seatbelt":
+        return <AlertTriangle className="w-5 h-5" />;
       default:
         return <AlertTriangle className="w-5 h-5" />;
     }
@@ -184,6 +294,10 @@ const Dashboard = () => {
     return new Date().toLocaleDateString(undefined, options);
   };
 
+  const handleViewDriverDetails = (driverId) => {
+    router.push(`/driver-details?driverId=${driverId}`);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -191,7 +305,7 @@ const Dashboard = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
           <div className="mb-4 md:mb-0">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Driver Behavior Monitoring
+              Driver Safety Monitoring
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
               Real-time monitoring for safer roads in Uganda
@@ -252,7 +366,7 @@ const Dashboard = () => {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
-                    Safe Driving
+                    Safety Score
                   </h3>
                   <CheckCircle className="w-8 h-8 text-green-500" />
                 </div>
@@ -268,7 +382,7 @@ const Dashboard = () => {
                   {dashboardData.safeDrivingPercentage}%
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Trips without incidents
+                  Safe driving compliance
                 </p>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-4">
                   <div
@@ -286,64 +400,29 @@ const Dashboard = () => {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
-                    Average Driver Score
+                    Active Drivers
                   </h3>
                   <Activity className="w-8 h-8 text-primary-500" />
                 </div>
                 <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                  {dashboardData.averageScore}
+                  {metrics.activeDrivers}
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Out of 100
+                  Currently on duty
                 </p>
-                <div className="flex justify-center mt-2">
-                  <div className="relative w-16 h-16">
-                    <svg className="w-full h-full" viewBox="0 0 100 100">
-                      <circle
-                        className="text-gray-200 dark:text-gray-700"
-                        strokeWidth="10"
-                        stroke="currentColor"
-                        fill="transparent"
-                        r="40"
-                        cx="50"
-                        cy="50"
-                      />
-                      <circle
-                        className={
-                          dashboardData.averageScore >= 80
-                            ? "text-green-500"
-                            : dashboardData.averageScore >= 60
-                            ? "text-amber-500"
-                            : "text-red-500"
-                        }
-                        strokeWidth="10"
-                        strokeDasharray={`${
-                          dashboardData.averageScore * 2.51
-                        } 251`}
-                        strokeLinecap="round"
-                        stroke="currentColor"
-                        fill="transparent"
-                        r="40"
-                        cx="50"
-                        cy="50"
-                        transform="rotate(-90 50 50)"
-                      />
-                    </svg>
-                  </div>
-                </div>
               </div>
             </div>
 
             {/* Two Column Layout for Alerts and Activity */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Safety Alerts - Takes 2/3 of space on large screens */}
+              {/* Safety Alerts */}
               <div className="lg:col-span-2">
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
                     <div className="flex items-center">
                       <Bell className="w-5 h-5 text-primary-500 mr-2" />
                       <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-                        Safety Alerts
+                        Safety Violations
                       </h2>
                     </div>
                     <Link
@@ -374,7 +453,7 @@ const Dashboard = () => {
                                     : "bg-green-200"
                                 } mr-4`}
                               >
-                                {getAlertIcon(alert.icon)}
+                                {getAlertIcon(alert.type)}
                               </div>
                               <div className="flex-1">
                                 <div className="flex items-center justify-between">
@@ -397,7 +476,7 @@ const Dashboard = () => {
                                       alert.severity.slice(1)}
                                   </div>
                                   <div className="text-xs ml-2">
-                                    Vehicle ID: {alert.vehicleId}
+                                    Vehicle: {alert.vehicleId}
                                   </div>
                                 </div>
                               </div>
@@ -407,9 +486,14 @@ const Dashboard = () => {
                                 <XCircle className="w-3 h-3 mr-1" />
                                 Dismiss
                               </button>
-                              <button className="flex items-center px-3 py-1 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600 transition-colors">
-                                <Eye className="w-3 h-3 mr-1" />
-                                View Details
+                              <button
+                                onClick={() =>
+                                  handleViewDriverDetails(alert.driverId)
+                                }
+                                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors duration-200 ease-in-out shadow-sm hover:shadow-md"
+                              >
+                                <Eye className="w-4 h-4 mr-1.5" />
+                                Driver Details
                               </button>
                             </div>
                           </div>
@@ -419,10 +503,10 @@ const Dashboard = () => {
                       <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-8 text-center">
                         <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
                         <p className="text-gray-600 dark:text-gray-400 text-lg">
-                          No safety alerts at this time.
+                          No safety violations detected
                         </p>
                         <p className="text-gray-500 dark:text-gray-500 text-sm mt-2">
-                          All drivers are following safety protocols.
+                          All drivers are following safety protocols
                         </p>
                       </div>
                     )}
@@ -430,7 +514,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Recent Activity - Takes 1/3 of space on large screens */}
+              {/* Recent Activity */}
               <div>
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
                   <div className="relative">

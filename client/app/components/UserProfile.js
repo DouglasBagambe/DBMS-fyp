@@ -23,10 +23,26 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
+  Eye,
+  Car,
+  Phone,
+  Calendar,
+  BarChart2,
+  Edit,
+  Trash2,
+  ArrowLeft,
+  Shield,
+  Activity,
+  MapPin,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import DriverDetails from "./DriverDetails";
 
 const UserProfile = () => {
   const { user, updateUserData, getUserFullName } = useContext(AuthContext);
+  const router = useRouter();
+  const searchParams = new URLSearchParams(window.location.search);
+  const driverIdFromUrl = searchParams.get("driverId");
   const [profileForm, setProfileForm] = useState({
     firstName: "",
     lastName: "",
@@ -67,6 +83,38 @@ const UserProfile = () => {
     phoneNumber: "",
     vehicleId: null,
   });
+  const [selectedDriver, setSelectedDriver] = useState(null);
+
+  // Define incident type weights (higher weight = more severe)
+  const incidentWeights = {
+    PHONE_USAGE: 5, // Most severe - direct distraction
+    CIGARETTE: 4, // Very severe - distraction and health risk
+    DROWSINESS: 3, // Severe - affects alertness
+    SEATBELT: 2, // Moderate - safety equipment
+    SPEEDING: 3, // Severe - affects control
+    DISTRACTION: 3, // Severe - affects attention
+    OTHER: 1, // Least severe - catch-all
+  };
+
+  // Calculate safety score based on incidents
+  const calculateSafetyScore = (incidents, incidentType) => {
+    if (!incidents || incidents === 0) return 100;
+
+    // Get the weight for this incident type, default to 'OTHER' if not found
+    const weight = incidentWeights[incidentType] || incidentWeights["OTHER"];
+
+    // Calculate score reduction based on number of incidents and their weight
+    const baseReduction = incidents * weight;
+
+    // Apply diminishing returns for multiple incidents
+    const diminishingFactor = Math.log10(incidents + 1);
+    const totalReduction = baseReduction * diminishingFactor;
+
+    // Calculate final score (100 - reduction, minimum 0)
+    const score = Math.max(0, Math.round(100 - totalReduction));
+
+    return score;
+  };
 
   // Get current date for header
   const getCurrentDate = () => {
@@ -122,7 +170,6 @@ const UserProfile = () => {
               })
               .catch((err) => {
                 console.error("Error fetching user profile:", err);
-                // Continue with other fetches
               })
           );
         }
@@ -151,7 +198,6 @@ const UserProfile = () => {
               })
               .catch((err) => {
                 console.error("Error fetching vehicles:", err);
-                // Continue with other fetches
               })
           );
         }
@@ -171,8 +217,8 @@ const UserProfile = () => {
                       vehicle: d.vehicle,
                       vehicleId: d.vehicle === "None" ? null : d.vehicle,
                       incidents: d.incidents,
-                      score: d.safety_score,
-                      passwordChanged: d.password_changed,
+                      incidentType: d.incident_type || "OTHER", // Add incident type
+                      score: calculateSafetyScore(d.incidents, d.incident_type),
                       lastLogin: d.last_login,
                     }))
                   );
@@ -181,7 +227,6 @@ const UserProfile = () => {
               })
               .catch((err) => {
                 console.error("Error fetching drivers:", err);
-                // Continue with other fetches
               })
           );
         }
@@ -235,6 +280,15 @@ const UserProfile = () => {
 
     // This effect should only run on mount and when user changes
   }, [user, updateUserData]);
+
+  useEffect(() => {
+    if (driverIdFromUrl) {
+      const driver = drivers.find((d) => d.driverId === driverIdFromUrl);
+      if (driver) {
+        setSelectedDriver(driver);
+      }
+    }
+  }, [driverIdFromUrl, drivers]);
 
   const handleProfileChange = (e) => {
     setProfileForm({ ...profileForm, [e.target.name]: e.target.value });
@@ -395,7 +449,8 @@ const UserProfile = () => {
         const response = await updateDriver(currentDriver.id, {
           name: driverForm.name,
           phoneNumber: driverForm.phoneNumber,
-          vehicleId: driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
+          vehicleId:
+            driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
         });
         if (response && response.driver) {
           setDrivers(
@@ -407,7 +462,10 @@ const UserProfile = () => {
                     name: response.driver.name,
                     phoneNumber: response.driver.phone_number,
                     vehicle: response.driver.vehicle,
-                    vehicleId: response.driver.vehicle === "None" ? null : response.driver.vehicle,
+                    vehicleId:
+                      response.driver.vehicle === "None"
+                        ? null
+                        : response.driver.vehicle,
                     incidents: response.driver.incidents,
                     score: response.driver.safety_score,
                     passwordChanged: response.driver.password_changed,
@@ -423,7 +481,8 @@ const UserProfile = () => {
           name: driverForm.name,
           driverId: driverForm.driverId,
           phoneNumber: driverForm.phoneNumber,
-          vehicleId: driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
+          vehicleId:
+            driverForm.vehicleId === "None" ? null : driverForm.vehicleId,
         });
         if (response && response.driver) {
           setDrivers([
@@ -434,7 +493,10 @@ const UserProfile = () => {
               name: response.driver.name,
               phoneNumber: response.driver.phone_number,
               vehicle: response.driver.vehicle,
-              vehicleId: response.driver.vehicle === "None" ? null : response.driver.vehicle,
+              vehicleId:
+                response.driver.vehicle === "None"
+                  ? null
+                  : response.driver.vehicle,
               incidents: response.driver.incidents,
               score: response.driver.safety_score,
               passwordChanged: response.driver.password_changed,
@@ -445,7 +507,12 @@ const UserProfile = () => {
         }
       }
       setShowDriverModal(false);
-      setDriverForm({ name: "", driverId: "", phoneNumber: "", vehicleId: null });
+      setDriverForm({
+        name: "",
+        driverId: "",
+        phoneNumber: "",
+        vehicleId: null,
+      });
       setCurrentDriver(null);
       setSuccessMessage(
         currentDriver
@@ -520,9 +587,43 @@ const UserProfile = () => {
     }
   };
 
-  const getScoreColor = (score) => {
-    return score >= 90 ? "#2e7d32" : score >= 70 ? "#9a8250" : "#d9534f";
+  const handleViewDriverDetails = (driverId) => {
+    router.push(`/driver-details?driverId=${driverId}`);
   };
+
+  const getScoreColor = (score) => {
+    if (score >= 90) return "#2e7d32"; // Green
+    if (score >= 70) return "#9a8250"; // Amber
+    return "#d9534f"; // Red
+  };
+
+  // Handle driver click
+  const handleDriverClick = (driver) => {
+    setSelectedDriver(driver);
+    // Update URL with driver ID
+    const newUrl = `${window.location.pathname}?driverId=${driver.driverId}`;
+    window.history.pushState({}, "", newUrl);
+  };
+
+  // Handle back from driver details
+  const handleBackFromDriverDetails = () => {
+    setSelectedDriver(null);
+    // Remove the driverId from URL when going back
+    const newUrl = window.location.pathname;
+    window.history.pushState({}, "", newUrl);
+    // Force a re-render of the current page state
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+
+  // If a driver is selected, show driver details
+  if (selectedDriver) {
+    return (
+      <DriverDetails
+        driverId={selectedDriver.driverId}
+        onBack={handleBackFromDriverDetails}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -848,124 +949,120 @@ const UserProfile = () => {
 
           {/* Drivers Section */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-gray-800 dark:text-white">
                 Drivers
-              </h2>
-              <button
-                onClick={() => {
-                  setCurrentDriver(null);
-                  setDriverForm({ name: "", driverId: "", phoneNumber: "", vehicleId: null });
-                  setShowDriverModal(true);
-                }}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-              >
-                Add Driver
-              </button>
+              </h3>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => router.push("/drivers/new")}
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                >
+                  <UserCircle className="w-4 h-4 mr-2" />
+                  Add Driver
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-700">
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Name
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Driver
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Driver ID
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Vehicle
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Phone Number
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Vehicle Assigned
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Last Login
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Incidents
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Safety Score
                     </th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Incidents
+                    </th>
+                    {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Last Login
+                    </th> */}
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {drivers.length > 0 ? (
-                    drivers.map((driver) => (
-                      <tr
-                        key={driver.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-200">
-                          {driver.name}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-                          {driver.driverId}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-                          {driver.phoneNumber}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-                          {driver.vehicle}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span
-                            className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                              driver.passwordChanged
-                                ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
-                                : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400"
-                            }`}
-                          >
-                            {driver.passwordChanged ? "Active" : "Pending Setup"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-                          {driver.lastLogin
-                            ? new Date(driver.lastLogin).toLocaleString()
-                            : "Never"}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-                          {driver.incidents}
-                        </td>
-                        <td
-                          className="px-4 py-2 text-sm font-medium"
-                          style={{ color: getScoreColor(driver.score) }}
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {drivers.map((driver) => (
+                    <tr
+                      key={driver.id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                      onClick={() => handleDriverClick(driver)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center">
+                              <UserCircle className="h-6 w-6 text-primary-500" />
+                            </div>
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {driver.name}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              ID: {driver.driverId}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 dark:text-white">
+                          {driver.vehicle || "Not assigned"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div
+                          className={`text-sm font-medium ${
+                            driver.score >= 90
+                              ? "text-green-600 dark:text-green-400"
+                              : driver.score >= 70
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-red-600 dark:text-red-400"
+                          }`}
                         >
                           {driver.score}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <button
-                            onClick={() => handleEditDriver(driver)}
-                            className="px-2 py-1 text-primary-600 hover:text-primary-700 text-sm font-medium"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleRemoveDriver(driver.id)}
-                            className="px-2 py-1 text-red-600 hover:text-red-700 text-sm font-medium"
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan="9"
-                        className="px-4 py-4 text-center text-gray-500 dark:text-gray-400"
-                      >
-                        No drivers found
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 dark:text-white">
+                          {driver.incidents || 0}
+                        </div>
+                      </td>
+                      {/* <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          {driver.lastLogin
+                            ? new Date(driver.lastLogin).toLocaleString()
+                            : "No login history"}
+                        </div>
+                      </td> */}
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditDriver(driver);
+                          }}
+                          className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 mr-4"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveDriver(driver.id);
+                          }}
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>

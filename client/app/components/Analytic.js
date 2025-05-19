@@ -6,7 +6,8 @@ import React, { useState, useEffect } from "react";
 import { Bar, Pie } from "react-chartjs-2";
 import Header from "./Header";
 import { Bell, AlertTriangle, Car, Clock, Eye, XCircle } from "lucide-react";
-import { getVehicles, getDrivers } from "../utils/api";
+import { getVehicles, getDrivers, normalizeIncidentType } from "../utils/api";
+import { useRouter } from "next/navigation";
 
 // Import Chart.js modules
 import {
@@ -32,12 +33,18 @@ ChartJS.register(
 );
 
 const Analytics = () => {
+  const router = useRouter();
   const [dateRange, setDateRange] = useState("7days");
   const [selectedVehicle, setSelectedVehicle] = useState("all");
   const [analyticsData, setAnalyticsData] = useState({
     vehicles: [],
     trends: [],
-    breakdown: { drowsiness: 0, phoneUsage: 0, eating: 0, talking: 0 },
+    breakdown: {
+      drowsiness: 0,
+      cigarette: 0,
+      seatbelt: 0,
+      phoneUsage: 0,
+    },
     timeline: [],
   });
   const [loading, setLoading] = useState(false);
@@ -111,6 +118,7 @@ const Analytics = () => {
             id: vehicle.vehicle_id || index + 1,
             vehicleNumber: vehicle.vehicle_number,
             driverName: driver.name || "Unknown",
+            driverId: driver.driver_id || null,
             status: vehicle.status || "Active",
             incidents: driver.incidents || 0,
           };
@@ -128,49 +136,121 @@ const Analytics = () => {
           incidents: vehicle.incidents,
         }));
 
-        // Calculate breakdown of incident types (simulated from driver incidents)
-        const breakdown = filteredVehicles.reduce(
-          (acc, vehicle) => {
-            const driver = driversData.drivers.find(
-              (d) => d.vehicle === vehicle.vehicleNumber
-            );
-            if (driver && driver.incidents > 0) {
-              // Simulate distribution of incident types
-              acc.drowsiness += Math.round(driver.incidents * 0.25); // 25%
-              acc.phoneUsage += Math.round(driver.incidents * 0.45); // 45%
-              acc.eating += Math.round(driver.incidents * 0.15); // 15%
-              acc.talking += Math.round(driver.incidents * 0.15); // 15%
-            }
-            return acc;
-          },
-          { drowsiness: 0, phoneUsage: 0, eating: 0, talking: 0 }
-        );
+        // Calculate breakdown of incident types using standard categories
+        const breakdown = {
+          drowsiness: 0,
+          cigarette: 0,
+          seatbelt: 0,
+          phoneUsage: 0,
+        };
 
-        // Simulate timeline (incidents within date range)
-        const days = getDaysFromRange(dateRange);
+        // Analyze driver incidents and categorize them properly
+        filteredVehicles.forEach((vehicle) => {
+          const driver = driversData.drivers.find(
+            (d) => d.vehicle === vehicle.vehicleNumber
+          );
+
+          if (driver && driver.incidents > 0) {
+            if (driver.incidents_list && driver.incidents_list.length > 0) {
+              // If we have detailed incident list, categorize each incident
+              driver.incidents_list.forEach((incident) => {
+                const normalizedType = normalizeIncidentType(
+                  incident.incident_type
+                );
+                switch (normalizedType) {
+                  case "DROWSINESS":
+                    breakdown.drowsiness++;
+                    break;
+                  case "CIGARETTE":
+                    breakdown.cigarette++;
+                    break;
+                  case "SEATBELT":
+                    breakdown.seatbelt++;
+                    break;
+                  case "PHONE_USAGE":
+                    breakdown.phoneUsage++;
+                    break;
+                  // Ignore other types
+                }
+              });
+            } else {
+              // If we don't have detailed incidents, estimate distribution
+              // This is just a fallback if incident details aren't available
+              breakdown.drowsiness += Math.round(driver.incidents * 0.25);
+              breakdown.cigarette += Math.round(driver.incidents * 0.25);
+              breakdown.seatbelt += Math.round(driver.incidents * 0.25);
+              breakdown.phoneUsage += Math.round(driver.incidents * 0.25);
+            }
+          }
+        });
+
+        // Simulate timeline with specific incident types
         const timeline = filteredVehicles
           .filter((vehicle) => vehicle.incidents > 0)
           .map((vehicle, index) => {
-            const incidentType =
-              vehicle.incidents > 2
-                ? "Phone usage"
-                : vehicle.incidents > 1
-                ? "Drowsiness"
-                : "Talking to passenger";
-            const severity =
-              vehicle.incidents > 2
-                ? "high"
-                : vehicle.incidents > 1
-                ? "medium"
-                : "low";
+            // Use standardized incident types
+            const standardIncidentTypes = [
+              { type: "DROWSINESS", message: "Drowsiness detected" },
+              { type: "CIGARETTE", message: "Cigarette usage detected" },
+              { type: "SEATBELT", message: "Seatbelt violation detected" },
+              { type: "PHONE_USAGE", message: "Phone usage detected" },
+            ];
+
+            // Get incident data for this vehicle
+            const driver = driversData.drivers.find(
+              (d) => d.vehicle === vehicle.vehicleNumber
+            );
+            let incidentType, message;
+
+            if (driver && driver.incident_type) {
+              // Use the driver's most common incident type if available
+              const normalizedType = normalizeIncidentType(
+                driver.incident_type
+              );
+              const matchedIncident = standardIncidentTypes.find(
+                (i) => i.type === normalizedType
+              );
+              incidentType = matchedIncident
+                ? matchedIncident.type.toLowerCase()
+                : "drowsiness";
+              message = matchedIncident
+                ? matchedIncident.message
+                : "Safety violation detected";
+            } else {
+              // Otherwise use rotational assignment
+              const incidentData =
+                standardIncidentTypes[index % standardIncidentTypes.length];
+              incidentType = incidentData.type.toLowerCase();
+              message = incidentData.message;
+            }
+
+            // Determine severity based on incident type
+            const getSeverity = (type) => {
+              switch (type.toUpperCase()) {
+                case "PHONE_USAGE":
+                  return "high";
+                case "DROWSINESS":
+                  return "high";
+                case "CIGARETTE":
+                  return "medium";
+                case "SEATBELT":
+                  return "medium";
+                default:
+                  return "low";
+              }
+            };
+
+            const severity = getSeverity(incidentType);
+
             return {
               id: index + 1,
-              message: `Driver ${vehicle.vehicleNumber}: ${incidentType} detected`,
-              timestamp: `Today, ${14 - index}: ${30 - index * 5}`, // Simulated timestamp
+              message: `Vehicle ${vehicle.vehicleNumber}: ${message}`,
+              timestamp: `Today, ${14 - index}: ${30 - index * 5}`,
               severity,
+              type: incidentType,
             };
           })
-          .slice(0, 3); // Limit to 3 for display
+          .slice(0, 3);
 
         setAnalyticsData({ vehicles, trends, breakdown, timeline });
       } catch (err) {
@@ -212,28 +292,28 @@ const Analytics = () => {
   const pieChartData = {
     labels: [
       "Drowsiness",
+      "Cigarette Usage",
+      "Seatbelt Violation",
       "Phone Usage",
-      "Eating/Drinking",
-      "Talking to Passengers",
     ],
     datasets: [
       {
         data: [
           analyticsData.breakdown.drowsiness,
+          analyticsData.breakdown.cigarette,
+          analyticsData.breakdown.seatbelt,
           analyticsData.breakdown.phoneUsage,
-          analyticsData.breakdown.eating,
-          analyticsData.breakdown.talking,
         ],
         backgroundColor: [
-          "rgba(33, 150, 243, 0.85)", // Blue
-          "rgba(244, 67, 54, 0.85)", // Red
-          "rgba(255, 152, 0, 0.85)", // Orange
-          "rgba(156, 39, 176, 0.85)", // Purple
+          "rgba(255, 152, 0, 0.85)", // Orange for drowsiness
+          "rgba(244, 67, 54, 0.85)", // Red for cigarette
+          "rgba(33, 150, 243, 0.85)", // Blue for seatbelt
+          "rgba(156, 39, 176, 0.85)", // Purple for phone
         ],
         borderColor: [
-          "rgba(33, 150, 243, 1)",
-          "rgba(244, 67, 54, 1)",
           "rgba(255, 152, 0, 1)",
+          "rgba(244, 67, 54, 1)",
+          "rgba(33, 150, 243, 1)",
           "rgba(156, 39, 176, 1)",
         ],
         borderWidth: 1,
@@ -344,9 +424,13 @@ const Analytics = () => {
       : 0;
   const behaviorLabels = {
     drowsiness: "Drowsiness",
+    cigarette: "Cigarette Usage",
+    seatbelt: "Seatbelt Violation",
     phoneUsage: "Phone Usage",
-    eating: "Eating/Drinking",
-    talking: "Talking to Passengers",
+  };
+
+  const handleViewDriverDetails = (driverId) => {
+    router.push(`/driver-details?driverId=${driverId}`);
   };
 
   return (
@@ -356,10 +440,10 @@ const Analytics = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
           <div className="mb-4 md:mb-0">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Analytics Dashboard
+              Safety Analytics Dashboard
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              In-depth insights into driver behavior and fleet safety
+              Monitor driver behavior and safety violations in real-time
             </p>
           </div>
           <div className="flex space-x-4">
@@ -416,30 +500,29 @@ const Analytics = () => {
           <>
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                  Highest Incident Vehicle
-                </h3>
-                <p className="text-xl font-bold text-red-600 dark:text-red-400 mb-1">
-                  {highestIncidentVehicle.vehicleNumber}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {highestIncidentVehicle.incidents} incidents in selected
-                  period
-                </p>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                  Most Common Behavior
+                  Most Common Violation
                 </h3>
                 <p className="text-xl font-bold text-red-600 dark:text-red-400 mb-1">
                   {behaviorLabels[mostCommonBehavior.key] || "N/A"}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {mostCommonPercentage}% of all incidents
+                  {mostCommonPercentage}% of all violations
                 </p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                  Total Violations
+                </h3>
+                <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mb-1">
+                  {totalIncidents}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  In selected period
+                </p>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Safest Vehicle
                 </h3>
@@ -447,7 +530,7 @@ const Analytics = () => {
                   {lowestIncidentVehicle.vehicleNumber}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {lowestIncidentVehicle.incidents} incidents in selected period
+                  {lowestIncidentVehicle.incidents} violations
                 </p>
               </div>
             </div>
@@ -538,9 +621,17 @@ const Analytics = () => {
                             </span>
                           </td>
                           <td className="px-4 py-4 text-right">
-                            <button className="text-primary-600 hover:text-primary-700 text-sm font-medium">
-                              View Details
-                            </button>
+                            {vehicle.driverId && (
+                              <button
+                                onClick={() =>
+                                  handleViewDriverDetails(vehicle.driverId)
+                                }
+                                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors duration-200 ease-in-out shadow-sm hover:shadow-md"
+                              >
+                                <Eye className="w-4 h-4 mr-1.5" />
+                                Driver Details
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -607,7 +698,7 @@ const Analytics = () => {
                           </button>
                           <button className="flex items-center px-3 py-1 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600">
                             <Eye className="w-3 h-3 mr-1" />
-                            View Details
+                            Driver Details
                           </button>
                         </div>
                       </div>
@@ -622,29 +713,30 @@ const Analytics = () => {
             </div>
 
             {/* Recommendations */}
-            <div className="bg-gradient-to-r from-primary-500 to-primary-700 rounded-xl p-6 shadow-sm text-white">
-              <h2 className="text-xl font-semibold mb-4">Recommendations</h2>
+            <div className="bg-gradient-to-r from-primary-500 to-primary-700 rounded-xl p-6 shadow-sm text-white mt-8">
+              <h2 className="text-xl font-semibold mb-4">
+                Safety Recommendations
+              </h2>
               <div className="space-y-4">
                 <div className="bg-white dark:bg-gray-800 bg-opacity-10 rounded-lg p-4 backdrop-blur-sm text-white">
                   <h3 className="font-medium mb-2 flex items-center">
                     <AlertTriangle className="w-5 h-5 mr-2" />
-                    Targeted Driver Training
+                    {mostCommonBehavior.key === "drowsiness"
+                      ? "Implement Rest Break Policy"
+                      : mostCommonBehavior.key === "cigarette"
+                      ? "Enforce No Smoking Policy"
+                      : mostCommonBehavior.key === "seatbelt"
+                      ? "Strengthen Seatbelt Enforcement"
+                      : "Address Phone Usage"}
                   </h3>
                   <p className="text-sm text-white/90">
-                    High phone usage incidents detected. Schedule a training
-                    session focusing on distraction-free driving to mitigate
-                    risks.
-                  </p>
-                </div>
-                <div className="bg-white dark:bg-gray-800 bg-opacity-10 rounded-lg p-4 backdrop-blur-sm text-white">
-                  <h3 className="font-medium mb-2 flex items-center">
-                    <AlertTriangle className="w-5 h-5 mr-2" />
-                    Implement Rest Break Policy
-                  </h3>
-                  <p className="text-sm text-white/90">
-                    Multiple drowsiness incidents detected across the fleet.
-                    Consider implementing mandatory rest breaks for drivers on
-                    shifts longer than 4 hours.
+                    {mostCommonBehavior.key === "drowsiness"
+                      ? "Multiple drowsiness incidents detected. Consider implementing mandatory rest breaks for drivers on shifts longer than 4 hours."
+                      : mostCommonBehavior.key === "cigarette"
+                      ? "Cigarette usage violations detected. Implement strict no-smoking policy and provide smoking cessation support."
+                      : mostCommonBehavior.key === "seatbelt"
+                      ? "Seatbelt violations detected. Conduct regular safety checks and implement automatic seatbelt reminder system."
+                      : "Phone usage violations detected. Install phone blocking technology and conduct distraction-free driving training."}
                   </p>
                 </div>
               </div>

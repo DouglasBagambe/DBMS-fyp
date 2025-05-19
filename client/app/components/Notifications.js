@@ -123,7 +123,7 @@ const Notifications = () => {
                       <XCircle className="w-3 h-3 mr-1" /> Dismiss
                     </button>
                     <button className="flex items-center px-3 py-1 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600">
-                      <Eye className="w-3 h-3 mr-1" /> View Details
+                      <Eye className="w-3 h-3 mr-1" /> Driver Detailsls
                     </button>
                   </div>
                 )}

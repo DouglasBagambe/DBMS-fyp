@@ -358,3 +358,69 @@ export const getDashboardMetrics = async () => {
     }
   }
 };
+
+export const getDriverDetails = async (driverId) => {
+  try {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      throw new Error("Authentication token not found");
+    }
+    const response = await axios.get(`${API_URL}/drivers/${driverId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.error || "Failed to fetch driver details"
+    );
+  }
+};
+
+// Normalize incident types to four standard categories
+export const normalizeIncidentType = (type) => {
+  if (!type) return "OTHER";
+
+  const upperType = type.toUpperCase();
+
+  // Phone usage detection
+  if (
+    upperType.includes("PHONE") ||
+    upperType.includes("CELL") ||
+    upperType.includes("MOBILE") ||
+    upperType.includes("DISTRACT") ||
+    upperType.includes("TEXT")
+  )
+    return "PHONE_USAGE";
+
+  // Drowsiness detection
+  if (
+    upperType.includes("DROWSI") ||
+    upperType.includes("SLEEP") ||
+    upperType.includes("TIRED") ||
+    upperType.includes("DOZED") ||
+    upperType.includes("FATIGUE")
+  )
+    return "DROWSINESS";
+
+  // Cigarette usage detection
+  if (
+    upperType.includes("CIGAR") ||
+    upperType.includes("SMOK") ||
+    upperType.includes("TOBACCO")
+  )
+    return "CIGARETTE";
+
+  // Seatbelt detection
+  if (
+    upperType.includes("SEAT") ||
+    upperType.includes("BELT") ||
+    upperType.includes("HARNESS") ||
+    upperType.includes("RESTRAINT")
+  )
+    return "SEATBELT";
+
+  // Default to OTHER if no match
+  return "OTHER";
+};
