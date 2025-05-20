@@ -15,6 +15,7 @@ import {
   updateDriver,
   deleteDriver,
   getDashboardMetrics,
+  getIncidents,
 } from "../utils/api";
 import { AuthContext } from "../context/AuthContext";
 import {
@@ -83,25 +84,55 @@ const UserProfile = () => {
     phoneNumber: "",
     vehicleId: null,
   });
-  const [selectedDriver, setSelectedDriver] = useState(null);
+  const [selectedDriverObject, setSelectedDriverObject] = useState(null);
 
-  // Define incident type weights (higher weight = more severe)
-  const incidentWeights = {
-    PHONE_USAGE: 5, // Most severe - direct distraction
-    CIGARETTE: 4, // Very severe - distraction and health risk
-    DROWSINESS: 3, // Severe - affects alertness
-    SEATBELT: 2, // Moderate - safety equipment
-    SPEEDING: 3, // Severe - affects control
-    DISTRACTION: 3, // Severe - affects attention
-    OTHER: 1, // Least severe - catch-all
+  // Map incident numbers to their respective types and messages
+  const incidentTypeMap = {
+    1: {
+      type: "PHONE_USAGE",
+      message: "Phone usage detected",
+      severity: "high",
+      weight: 5, // Most severe - direct distraction
+    },
+    2: {
+      type: "CIGARETTE",
+      message: "Cigarette usage detected",
+      severity: "medium",
+      weight: 4, // Very severe - distraction and health risk
+    },
+    3: {
+      type: "SEATBELT",
+      message: "Seatbelt violation detected",
+      severity: "medium",
+      weight: 3, // Moderate - safety equipment
+    },
+    4: {
+      type: "DROWSINESS",
+      message: "Driver drowsiness detected",
+      severity: "high",
+      weight: 4, // Severe - affects alertness
+    },
+  };
+
+  // Helper function to get incident type info based on incident_no
+  const getIncidentTypeInfo = (incidentNo) => {
+    return incidentTypeMap[incidentNo] || null;
   };
 
   // Calculate safety score based on incidents
-  const calculateSafetyScore = (incidents, incidentType) => {
+  const calculateSafetyScore = (incidents, incidentNo) => {
     if (!incidents || incidents === 0) return 100;
 
-    // Get the weight for this incident type, default to 'OTHER' if not found
-    const weight = incidentWeights[incidentType] || incidentWeights["OTHER"];
+    // Get the weight for this incident type, default to 3 (medium severity) if not found
+    let weight = 3; // Default weight
+
+    // Try to get the weight from the incident type map
+    if (incidentNo) {
+      const incidentNumber = Number(incidentNo);
+      if (incidentTypeMap[incidentNumber]) {
+        weight = incidentTypeMap[incidentNumber].weight;
+      }
+    }
 
     // Calculate score reduction based on number of incidents and their weight
     const baseReduction = incidents * weight;
@@ -205,23 +236,79 @@ const UserProfile = () => {
         // Drivers - only fetch if not already loaded
         if (!dataCache.driversLoaded && (!drivers || drivers.length === 0)) {
           fetchPromises.push(
-            getDrivers()
-              .then((driverData) => {
+            Promise.all([getDrivers(), getIncidents()])
+              .then(([driverData, incidentsData]) => {
                 if (driverData && driverData.drivers) {
-                  setDrivers(
-                    driverData.drivers.map((d) => ({
+                  console.log("Fetched drivers:", driverData.drivers.length);
+
+                  // Process incidents to map them to drivers
+                  let driverIncidentsMap = {};
+
+                  if (incidentsData && Array.isArray(incidentsData)) {
+                    incidentsData.forEach((incident) => {
+                      if (incident.driver_id && incident.incident_no) {
+                        if (!driverIncidentsMap[incident.driver_id]) {
+                          driverIncidentsMap[incident.driver_id] = {
+                            count: 0,
+                            incidentNo: incident.incident_no,
+                            incidents: [],
+                          };
+                        }
+
+                        driverIncidentsMap[incident.driver_id].count++;
+                        driverIncidentsMap[incident.driver_id].incidents.push(
+                          incident
+                        );
+
+                        // Update most common incident type for this driver
+                        const currentCount =
+                          driverIncidentsMap[incident.driver_id].count || 0;
+                        if (
+                          currentCount >
+                          (driverIncidentsMap[incident.driver_id]
+                            .mostCommonCount || 0)
+                        ) {
+                          driverIncidentsMap[
+                            incident.driver_id
+                          ].mostCommonCount = currentCount;
+                          driverIncidentsMap[incident.driver_id].incidentNo =
+                            incident.incident_no;
+                        }
+                      }
+                    });
+                  }
+
+                  const processedDrivers = driverData.drivers.map((d) => {
+                    // Get incident data from our map
+                    const incidentData = driverIncidentsMap[d.driver_id] || {
+                      count: 0,
+                      incidentNo: 3,
+                    };
+
+                    return {
                       id: d.id,
                       driverId: d.driver_id,
                       name: d.name,
                       phoneNumber: d.phone_number,
                       vehicle: d.vehicle,
                       vehicleId: d.vehicle === "None" ? null : d.vehicle,
-                      incidents: d.incidents,
-                      incidentType: d.incident_type || "OTHER", // Add incident type
-                      score: calculateSafetyScore(d.incidents, d.incident_type),
+                      incidents: d.incidents || incidentData.count || 0,
+                      incidentNo: d.incident_no || incidentData.incidentNo || 3,
+                      incidentType:
+                        getIncidentTypeInfo(
+                          d.incident_no || incidentData.incidentNo || 3
+                        )?.type || "SEATBELT",
+                      score: calculateSafetyScore(
+                        d.incidents || incidentData.count || 0,
+                        d.incident_no || incidentData.incidentNo || 3
+                      ),
                       lastLogin: d.last_login,
-                    }))
-                  );
+                      incidentsData: incidentData.incidents || [],
+                    };
+                  });
+
+                  console.log("Processed drivers:", processedDrivers.length);
+                  setDrivers(processedDrivers);
                   dataCache.driversLoaded = true;
                 }
               })
@@ -281,11 +368,12 @@ const UserProfile = () => {
     // This effect should only run on mount and when user changes
   }, [user, updateUserData]);
 
+  // Handle driver selection from URL or component state
   useEffect(() => {
     if (driverIdFromUrl) {
       const driver = drivers.find((d) => d.driverId === driverIdFromUrl);
       if (driver) {
-        setSelectedDriver(driver);
+        setSelectedDriverObject(driver);
       }
     }
   }, [driverIdFromUrl, drivers]);
@@ -599,7 +687,7 @@ const UserProfile = () => {
 
   // Handle driver click
   const handleDriverClick = (driver) => {
-    setSelectedDriver(driver);
+    setSelectedDriverObject(driver);
     // Update URL with driver ID
     const newUrl = `${window.location.pathname}?driverId=${driver.driverId}`;
     window.history.pushState({}, "", newUrl);
@@ -607,7 +695,7 @@ const UserProfile = () => {
 
   // Handle back from driver details
   const handleBackFromDriverDetails = () => {
-    setSelectedDriver(null);
+    setSelectedDriverObject(null);
     // Remove the driverId from URL when going back
     const newUrl = window.location.pathname;
     window.history.pushState({}, "", newUrl);
@@ -615,11 +703,11 @@ const UserProfile = () => {
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
 
-  // If a driver is selected, show driver details
-  if (selectedDriver) {
+  // If a driver is selected for detail view, show driver details
+  if (selectedDriverObject) {
     return (
       <DriverDetails
-        driverId={selectedDriver.driverId}
+        driverId={selectedDriverObject.driverId}
         onBack={handleBackFromDriverDetails}
       />
     );
@@ -954,13 +1042,22 @@ const UserProfile = () => {
                 Drivers
               </h3>
               <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => router.push("/drivers/new")}
+              <button
+                onClick={() => {
+                  setCurrentDriver(null);
+                    setDriverForm({
+                      name: "",
+                      driverId: "",
+                      phoneNumber: "",
+                      vehicleId: null,
+                    });
+                  setShowDriverModal(true);
+                }}
                   className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                >
+              >
                   <UserCircle className="w-4 h-4 mr-2" />
-                  Add Driver
-                </button>
+                Add Driver
+              </button>
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -979,90 +1076,91 @@ const UserProfile = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Incidents
                     </th>
-                    {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Last Login
-                    </th> */}
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {drivers.map((driver) => (
-                    <tr
-                      key={driver.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                      onClick={() => handleDriverClick(driver)}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center">
-                              <UserCircle className="h-6 w-6 text-primary-500" />
+                  {drivers && drivers.length > 0 ? (
+                    drivers.map((driver) => (
+                      <tr
+                        key={driver.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                        onClick={() => handleDriverClick(driver)}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center">
+                                <UserCircle className="h-6 w-6 text-primary-500" />
+                              </div>
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          {driver.name}
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
+                                ID: {driver.driverId}
+                              </div>
                             </div>
                           </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900 dark:text-white">
-                              {driver.name}
-                            </div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400">
-                              ID: {driver.driverId}
-                            </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900 dark:text-white">
+                            {driver.vehicle || "Not assigned"}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 dark:text-white">
-                          {driver.vehicle || "Not assigned"}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div
-                          className={`text-sm font-medium ${
-                            driver.score >= 90
-                              ? "text-green-600 dark:text-green-400"
-                              : driver.score >= 70
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-red-600 dark:text-red-400"
-                          }`}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div
+                            className={`text-sm font-medium ${
+                              driver.score >= 90
+                                ? "text-green-600 dark:text-green-400"
+                                : driver.score >= 70
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-red-600 dark:text-red-400"
+                            }`}
                         >
                           {driver.score}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 dark:text-white">
-                          {driver.incidents || 0}
-                        </div>
-                      </td>
-                      {/* <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {driver.lastLogin
-                            ? new Date(driver.lastLogin).toLocaleString()
-                            : "No login history"}
-                        </div>
-                      </td> */}
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditDriver(driver);
-                          }}
-                          className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 mr-4"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveDriver(driver.id);
-                          }}
-                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                        >
-                          Delete
-                        </button>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900 dark:text-white">
+                            {driver.incidents || 0}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditDriver(driver);
+                            }}
+                            className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 mr-4"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveDriver(driver.id);
+                            }}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan="5"
+                        className="px-6 py-4 text-center text-gray-500 dark:text-gray-400"
+                      >
+                        {loading ? "Loading drivers..." : "No drivers found"}
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

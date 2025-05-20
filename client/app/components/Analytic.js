@@ -1,12 +1,31 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-// src/components/Analytics.js
+// src/components/Analytic.js
 
 "use client";
 import React, { useState, useEffect } from "react";
-import { Bar, Pie } from "react-chartjs-2";
-import Header from "./Header";
-import { Bell, AlertTriangle, Car, Clock, Eye, XCircle } from "lucide-react";
-import { getVehicles, getDrivers, normalizeIncidentType } from "../utils/api";
+import { Bar, Pie, Line } from "react-chartjs-2";
+import {
+  Bell,
+  AlertTriangle,
+  Car,
+  Clock,
+  Eye,
+  XCircle,
+  Phone,
+  Moon,
+  Calendar,
+  Filter,
+  BarChart2,
+  Download,
+  Info,
+  UserCircle,
+  ArrowRight,
+} from "lucide-react";
+import {
+  getVehicles,
+  getDrivers,
+  getDashboardMetrics,
+  getIncidents,
+} from "../utils/api";
 import { useRouter } from "next/navigation";
 
 // Import Chart.js modules
@@ -15,6 +34,8 @@ import {
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
   Title,
   Tooltip,
   Legend,
@@ -26,29 +47,140 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
   Title,
   Tooltip,
   Legend,
   ArcElement
 );
 
+// Map incident numbers to their respective types and messages
+const incidentTypeMap = {
+  1: {
+    type: "PHONE_USAGE",
+    message: "Phone usage detected",
+    severity: "high",
+    displayName: "Phone Usage",
+  },
+  2: {
+    type: "CIGARETTE",
+    message: "Cigarette usage detected",
+    severity: "medium",
+    displayName: "Cigarette Usage",
+  },
+  3: {
+    type: "SEATBELT",
+    message: "Seatbelt violation detected",
+    severity: "medium",
+    displayName: "Seatbelt Violation",
+  },
+  4: {
+    type: "DROWSINESS",
+    message: "Driver drowsiness detected",
+    severity: "high",
+    displayName: "Drowsiness",
+  },
+};
+
+// Helper function to get incident type info based on incident_no
+const getIncidentTypeInfo = (incidentNo) => {
+  return incidentTypeMap[incidentNo] || null;
+};
+
+// Helper function to get incident message based on incident number
+const getIncidentMessage = (incidentNo) => {
+  const info = getIncidentTypeInfo(incidentNo);
+  return info ? info.message : "Safety violation detected";
+};
+
+// Helper function to get incident severity based on incident number
+const getIncidentSeverity = (incidentNo) => {
+  const info = getIncidentTypeInfo(incidentNo);
+  return info ? info.severity : "low";
+};
+
+// Helper function to map incident number to display name
+const getIncidentDisplayName = (incidentNo) => {
+  const info = getIncidentTypeInfo(incidentNo);
+  return info ? info.displayName : "Unknown Violation";
+};
+
+// Convert between incident_type strings and incident_no numbers
+const normalizeIncidentType = (value) => {
+  // If it's already a number between 1-4, return it
+  if (typeof value === "number" && value >= 1 && value <= 4) {
+    return value;
+  }
+
+  // If it's a string that can be parsed directly to a valid incident number
+  if (typeof value === "string") {
+    const num = parseInt(value, 10);
+    if (!isNaN(num) && num >= 1 && num <= 4) {
+      return num;
+    }
+
+    // Convert to lowercase for case-insensitive matching of text types
+    const lowerType = value.toLowerCase().trim();
+
+    // Map text descriptions to incident numbers
+    if (lowerType.includes("phone") || lowerType === "phone usage") {
+      return 1; // Phone usage
+    }
+
+    if (lowerType.includes("cigarette") || lowerType.includes("smoking")) {
+      return 2; // Cigarette
+    }
+
+    if (
+      lowerType.includes("seatbelt") ||
+      lowerType.includes("belt") ||
+      lowerType === "seatbelt absence" ||
+      lowerType === "no seatbelt"
+    ) {
+      return 3; // Seatbelt
+    }
+
+    if (
+      lowerType.includes("sleep") ||
+      lowerType.includes("drowsy") ||
+      lowerType === "sleepy" ||
+      lowerType === "drowsiness"
+    ) {
+      return 4; // Drowsiness
+    }
+  }
+
+  // Default to seatbelt (3) as most common violation if we can't determine
+  console.log("Unknown incident type, defaulting to Seatbelt (3):", value);
+  return 3;
+};
+
 const Analytics = () => {
   const router = useRouter();
   const [dateRange, setDateRange] = useState("7days");
   const [selectedVehicle, setSelectedVehicle] = useState("all");
-  const [analyticsData, setAnalyticsData] = useState({
+  const [selectedDriver, setSelectedDriver] = useState("all");
+  const [analytics, setAnalytics] = useState({
     vehicles: [],
-    trends: [],
-    breakdown: {
+    drivers: [],
+    incidents: {
       drowsiness: 0,
       cigarette: 0,
       seatbelt: 0,
       phoneUsage: 0,
     },
-    timeline: [],
+    incidentTimeline: [],
+    incidentsByVehicle: [],
+    incidentsByDriver: [],
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [metrics, setMetrics] = useState({
+    vehicleCount: 0,
+    activeDriverCount: 0,
+    incidentCount: 0,
+  });
 
   // Map date range to days for filtering
   const getDaysFromRange = (range) => {
@@ -60,199 +192,328 @@ const Analytics = () => {
       case "90days":
         return 90;
       default:
-        return 7; // Default to 7 days for custom or invalid range
+        return 7;
     }
   };
 
-  // Fetch data based on date range and selected vehicle
+  // Fetch and process analytics data
   useEffect(() => {
-    // Analytics data state cache
-    const dataCache = {
-      lastFetch: 0,
-      lastDateRange: null,
-      lastSelectedVehicle: null,
-    };
-
     const fetchData = async () => {
-      // Skip if already loading
-      if (loading) return;
-
-      // Cache for 30 seconds unless filters change
-      const now = Date.now();
-      const cacheExpired = now - dataCache.lastFetch > 30000;
-      const filtersChanged =
-        dataCache.lastDateRange !== dateRange ||
-        dataCache.lastSelectedVehicle !== selectedVehicle;
-
-      // Skip if cache is valid and filters haven't changed
-      if (
-        !cacheExpired &&
-        !filtersChanged &&
-        analyticsData.vehicles?.length > 0
-      ) {
-        return;
-      }
-
-      // Update cache markers
-      dataCache.lastFetch = now;
-      dataCache.lastDateRange = dateRange;
-      dataCache.lastSelectedVehicle = selectedVehicle;
-
       setLoading(true);
       setError(null);
 
       try {
-        // Stagger requests to avoid rate limiting
-        const vehiclesData = await getVehicles();
-        // Small delay between requests
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        const driversData = await getDrivers();
+        // Fetch dashboard metrics, vehicles, drivers and incidents data
+        const [
+          metricsData,
+          vehiclesResponse,
+          driversResponse,
+          incidentsResponse,
+        ] = await Promise.all([
+          getDashboardMetrics(),
+          getVehicles(),
+          getDrivers(),
+          getIncidents(),
+        ]);
 
-        // Process vehicles and drivers
-        const vehicles = vehiclesData.vehicles.map((vehicle, index) => {
-          const driver =
-            driversData.drivers.find(
-              (d) => d.vehicle === vehicle.vehicle_number
-            ) || {};
+        // Log what we're filtering by
+        console.log(
+          `Filtering by - Driver: ${selectedDriver}, Vehicle: ${selectedVehicle}`
+        );
+
+        // Update metrics state based on filters
+        if (selectedDriver !== "all" || selectedVehicle !== "all") {
+          // We'll calculate custom metrics based on selections
+          const customMetrics = {
+            vehicleCount:
+              selectedVehicle !== "all" ? 1 : metricsData.vehicleCount || 0,
+            activeDriverCount:
+              selectedDriver !== "all" ? 1 : metricsData.activeDriverCount || 0,
+            incidentCount: 0, // Will be updated after filtering incidents
+          };
+          setMetrics(customMetrics);
+        } else {
+          // Use default metrics when no filters are applied
+          setMetrics({
+            vehicleCount: metricsData.vehicleCount || 0,
+            activeDriverCount: metricsData.activeDriverCount || 0,
+            incidentCount: metricsData.incidentCount || 0,
+          });
+        }
+
+        if (!vehiclesResponse.vehicles || !driversResponse.drivers) {
+          throw new Error("Failed to load vehicles or drivers data");
+        }
+
+        const vehiclesData = vehiclesResponse.vehicles || [];
+        const driversData = driversResponse.drivers || [];
+
+        // Debugging - log raw data to understand what's coming from the API
+        console.log("Raw vehicles data:", vehiclesData);
+        console.log("Raw drivers data:", driversData);
+
+        // Process vehicles data with assigned drivers
+        const processedVehicles = vehiclesData.map((vehicle) => {
+          const assignedDriver = driversData.find(
+            (d) => d.vehicle === vehicle.vehicle_number
+          );
+
           return {
-            id: vehicle.vehicle_id || index + 1,
+            id: vehicle.id,
             vehicleNumber: vehicle.vehicle_number,
-            driverName: driver.name || "Unknown",
-            driverId: driver.driver_id || null,
-            status: vehicle.status || "Active",
-            incidents: driver.incidents || 0,
+            type: vehicle.type,
+            status: vehicle.status,
+            driverName: assignedDriver?.name || "Unassigned",
+            driverId: assignedDriver?.driver_id || null,
+            incidents: assignedDriver?.incidents || 0,
           };
         });
 
-        // Filter vehicles based on selectedVehicle
+        // Filter vehicles based on selected vehicle (if not "all")
         const filteredVehicles =
           selectedVehicle === "all"
-            ? vehicles
-            : vehicles.filter((v) => v.vehicleNumber === selectedVehicle);
+            ? processedVehicles
+            : processedVehicles.filter(
+                (v) => v.vehicleNumber === selectedVehicle
+              );
 
-        // Calculate trends (incidents per vehicle)
-        const trends = filteredVehicles.map((vehicle) => ({
-          vehicleId: vehicle.vehicleNumber,
-          incidents: vehicle.incidents,
-        }));
+        // Process drivers data with their assigned vehicles
+        const processedDrivers = driversData.map((driver) => {
+          const assignedVehicle = vehiclesData.find(
+            (v) => v.vehicle_number === driver.vehicle
+          );
 
-        // Calculate breakdown of incident types using standard categories
-        const breakdown = {
+          return {
+            id: driver.id,
+            driverId: driver.driver_id,
+            name: driver.name,
+            vehicleType: assignedVehicle?.type || null,
+            vehicleStatus: assignedVehicle?.status || null,
+            incidents: driver.incidents || 0,
+            vehicle: driver.vehicle || "None",
+            lastLogin: driver.last_login,
+          };
+        });
+
+        // Filter drivers based on selected driver (if not "all")
+        const filteredDrivers =
+          selectedDriver === "all"
+            ? processedDrivers
+            : processedDrivers.filter((d) => d.driverId === selectedDriver);
+
+        console.log(`Filtered drivers: ${filteredDrivers.length}`);
+        console.log("Selected driver:", selectedDriver);
+        console.log("First filtered driver:", filteredDrivers[0]);
+
+        // Initialize incident counters
+        const incidentCounts = {
           drowsiness: 0,
           cigarette: 0,
           seatbelt: 0,
           phoneUsage: 0,
         };
 
-        // Analyze driver incidents and categorize them properly
-        filteredVehicles.forEach((vehicle) => {
-          const driver = driversData.drivers.find(
-            (d) => d.vehicle === vehicle.vehicleNumber
-          );
+        // Process incidents from API response
+        let allIncidents = [];
 
-          if (driver && driver.incidents > 0) {
-            if (driver.incidents_list && driver.incidents_list.length > 0) {
-              // If we have detailed incident list, categorize each incident
-              driver.incidents_list.forEach((incident) => {
-                const normalizedType = normalizeIncidentType(
-                  incident.incident_type
+        console.log("DEBUGGING: Processing incidents from API");
+
+        if (incidentsResponse && Array.isArray(incidentsResponse)) {
+          // Filter incidents based on selected driver/vehicle if needed
+          let filteredIncidents = incidentsResponse;
+
+          // Apply driver filter
+          if (selectedDriver !== "all") {
+            console.log(
+              "Sample incidents before filtering:",
+              incidentsResponse.slice(0, 3)
+            );
+
+            filteredIncidents = filteredIncidents.filter((incident) => {
+              if (!incident.driver_id) return false;
+
+              // Convert both to strings for safer comparison
+              const incidentDriverId = String(incident.driver_id).trim();
+              const selectedDriverId = String(selectedDriver).trim();
+
+              // Log some comparisons for debugging
+              if (Math.random() < 0.1) {
+                console.log(
+                  `Comparing ${incidentDriverId} with ${selectedDriverId}`,
+                  incidentDriverId === selectedDriverId
                 );
-                switch (normalizedType) {
-                  case "DROWSINESS":
-                    breakdown.drowsiness++;
-                    break;
-                  case "CIGARETTE":
-                    breakdown.cigarette++;
-                    break;
-                  case "SEATBELT":
-                    breakdown.seatbelt++;
-                    break;
-                  case "PHONE_USAGE":
-                    breakdown.phoneUsage++;
-                    break;
-                  // Ignore other types
-                }
-              });
-            } else {
-              // If we don't have detailed incidents, estimate distribution
-              // This is just a fallback if incident details aren't available
-              breakdown.drowsiness += Math.round(driver.incidents * 0.25);
-              breakdown.cigarette += Math.round(driver.incidents * 0.25);
-              breakdown.seatbelt += Math.round(driver.incidents * 0.25);
-              breakdown.phoneUsage += Math.round(driver.incidents * 0.25);
+              }
+
+              return incidentDriverId === selectedDriverId;
+            });
+
+            console.log(
+              `Filtered incidents by driver ${selectedDriver}:`,
+              filteredIncidents.length
+            );
+          }
+
+          // Apply vehicle filter
+          if (selectedVehicle !== "all") {
+            // Find the vehicle ID corresponding to the selected vehicle number
+            const selectedVehicleObj = vehiclesData.find(
+              (v) => v.vehicle_number === selectedVehicle
+            );
+
+            if (selectedVehicleObj) {
+              filteredIncidents = filteredIncidents.filter(
+                (incident) => incident.vehicle_id === selectedVehicleObj.id
+              );
+              console.log(
+                `Filtered incidents by vehicle ${selectedVehicle}:`,
+                filteredIncidents.length
+              );
             }
           }
+
+          console.log(
+            `Processing ${filteredIncidents.length} incidents from API`
+          );
+
+          // Process each incident
+          filteredIncidents.forEach((incident) => {
+            // Use the incident_no to determine type
+            const incidentNo = Number(incident.incident_no);
+            console.log(`Processing incident with incident_no: ${incidentNo}`);
+
+            if (incidentNo) {
+              // Count incidents by type
+              switch (incidentNo) {
+                case 4: // Drowsiness
+                  incidentCounts.drowsiness++;
+                  break;
+                case 2: // Cigarette
+                  incidentCounts.cigarette++;
+                  break;
+                case 3: // Seatbelt
+                  incidentCounts.seatbelt++;
+                  break;
+                case 1: // Phone usage
+                  incidentCounts.phoneUsage++;
+                  break;
+              }
+
+              // Find driver name based on driver_id from filtered drivers
+              let driverName = `Driver ${incident.driver_id}`;
+              const driver = filteredDrivers.find(
+                (d) => String(d.driverId) === String(incident.driver_id)
+              );
+              if (driver && driver.name) {
+                driverName = driver.name;
+              }
+
+              // Find vehicle number based on vehicle_id from filtered vehicles
+              let vehicleNumber = incident.vehicle_id;
+              const vehicle = filteredVehicles.find(
+                (v) => v.id === incident.vehicle_id
+              );
+              if (vehicle) {
+                vehicleNumber = vehicle.vehicleNumber;
+              }
+
+              // Add incident to the list
+              allIncidents.push({
+                id:
+                  incident.id ||
+                  `incident-${Math.random().toString(36).substring(2)}`,
+                driverId: incident.driver_id,
+                driverName: driverName,
+                vehicleNumber: vehicleNumber,
+                vehicleId: incident.vehicle_id,
+                incidentNo: incidentNo,
+                type: getIncidentTypeInfo(incidentNo)?.type || "UNKNOWN",
+                timestamp: incident.created_at || new Date().toISOString(),
+                severity: getIncidentSeverity(incidentNo),
+                message: `${driverName}: ${getIncidentMessage(incidentNo)}`,
+                description: incident.description || "",
+              });
+            }
+          });
+
+          // If we filtered by driver but found no incidents, create synthetic ones
+          if (
+            selectedDriver !== "all" &&
+            filteredIncidents.length === 0 &&
+            filteredDrivers.length > 0
+          ) {
+            console.log("No incidents found for the selected driver");
+            // No synthetic incidents - show actual data only
+          }
+        } else {
+          console.log(
+            "No incidents data available from API, showing empty charts"
+          );
+        }
+
+        // Output incident counts for debugging
+        console.log("Processed incident counts:", incidentCounts);
+
+        // Update the incident count in metrics now that we've counted them
+        if (selectedDriver !== "all" || selectedVehicle !== "all") {
+          // Update the custom metrics with actual incident count
+          const totalIncidents =
+            incidentCounts.drowsiness +
+            incidentCounts.cigarette +
+            incidentCounts.seatbelt +
+            incidentCounts.phoneUsage;
+          setMetrics((prevMetrics) => ({
+            ...prevMetrics,
+            incidentCount: totalIncidents,
+          }));
+        }
+
+        // Sort incidents by timestamp (newest first)
+        const sortedIncidents = allIncidents.sort(
+          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        );
+
+        // Format timestamps for display
+        const formattedIncidents = sortedIncidents.map((incident) => ({
+          ...incident,
+          formattedTime: new Date(incident.timestamp).toLocaleString(),
+        }));
+
+        // Group incidents by vehicle
+        const incidentsByVehicle = [];
+        filteredVehicles.forEach((vehicle) => {
+          const vehicleIncidents = formattedIncidents.filter(
+            (i) => i.vehicleNumber === vehicle.vehicleNumber
+          );
+
+          incidentsByVehicle.push({
+            vehicleNumber: vehicle.vehicleNumber,
+            incidents: vehicleIncidents.length,
+          });
         });
 
-        // Simulate timeline with specific incident types
-        const timeline = filteredVehicles
-          .filter((vehicle) => vehicle.incidents > 0)
-          .map((vehicle, index) => {
-            // Use standardized incident types
-            const standardIncidentTypes = [
-              { type: "DROWSINESS", message: "Drowsiness detected" },
-              { type: "CIGARETTE", message: "Cigarette usage detected" },
-              { type: "SEATBELT", message: "Seatbelt violation detected" },
-              { type: "PHONE_USAGE", message: "Phone usage detected" },
-            ];
+        // Group incidents by driver
+        const incidentsByDriver = [];
+        filteredDrivers.forEach((driver) => {
+          const driverIncidents = formattedIncidents.filter(
+            (i) => String(i.driverId) === String(driver.driverId)
+          );
 
-            // Get incident data for this vehicle
-            const driver = driversData.drivers.find(
-              (d) => d.vehicle === vehicle.vehicleNumber
-            );
-            let incidentType, message;
+          incidentsByDriver.push({
+            driverId: driver.driverId,
+            driverName: driver.name,
+            incidents: driverIncidents.length,
+          });
+        });
 
-            if (driver && driver.incident_type) {
-              // Use the driver's most common incident type if available
-              const normalizedType = normalizeIncidentType(
-                driver.incident_type
-              );
-              const matchedIncident = standardIncidentTypes.find(
-                (i) => i.type === normalizedType
-              );
-              incidentType = matchedIncident
-                ? matchedIncident.type.toLowerCase()
-                : "drowsiness";
-              message = matchedIncident
-                ? matchedIncident.message
-                : "Safety violation detected";
-            } else {
-              // Otherwise use rotational assignment
-              const incidentData =
-                standardIncidentTypes[index % standardIncidentTypes.length];
-              incidentType = incidentData.type.toLowerCase();
-              message = incidentData.message;
-            }
-
-            // Determine severity based on incident type
-            const getSeverity = (type) => {
-              switch (type.toUpperCase()) {
-                case "PHONE_USAGE":
-                  return "high";
-                case "DROWSINESS":
-                  return "high";
-                case "CIGARETTE":
-                  return "medium";
-                case "SEATBELT":
-                  return "medium";
-                default:
-                  return "low";
-              }
-            };
-
-            const severity = getSeverity(incidentType);
-
-            return {
-              id: index + 1,
-              message: `Vehicle ${vehicle.vehicleNumber}: ${message}`,
-              timestamp: `Today, ${14 - index}: ${30 - index * 5}`,
-              severity,
-              type: incidentType,
-            };
-          })
-          .slice(0, 3);
-
-        setAnalyticsData({ vehicles, trends, breakdown, timeline });
+        // Update analytics state
+        setAnalytics({
+          vehicles: filteredVehicles,
+          drivers: filteredDrivers,
+          incidents: incidentCounts,
+          incidentTimeline: formattedIncidents.slice(0, 5), // Top 5 most recent
+          incidentsByVehicle: incidentsByVehicle,
+          incidentsByDriver: incidentsByDriver,
+        });
       } catch (err) {
         console.error("Error fetching analytics data:", err);
         setError(err.message || "Failed to load analytics data");
@@ -261,24 +522,78 @@ const Analytics = () => {
       }
     };
 
-    // Only refetch when dateRange or selectedVehicle changes
-    // or if analyticsData is empty
-    if (
-      !analyticsData?.vehicles?.length ||
-      dateRange !== dataCache.lastDateRange ||
-      selectedVehicle !== dataCache.lastSelectedVehicle
-    ) {
-      fetchData();
+    fetchData();
+  }, [dateRange, selectedVehicle, selectedDriver]);
+  // Get CSS classes for incident severity
+  const getSeverityStyle = (severity) => {
+    switch (severity.toLowerCase()) {
+      case "high":
+        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 border-l-4 border-red-500";
+      case "medium":
+        return "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 border-l-4 border-amber-500";
+      case "low":
+        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500";
+      default:
+        return "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border-l-4 border-blue-500";
     }
-  }, [dateRange, selectedVehicle]);
+  };
 
-  // Bar Chart Data
+  // Get colored dot for severity level
+  const getSeverityDot = (severity) => {
+    switch (severity.toLowerCase()) {
+      case "high":
+        return "bg-red-500";
+      case "medium":
+        return "bg-amber-500";
+      case "low":
+        return "bg-green-500";
+      default:
+        return "bg-blue-500";
+    }
+  };
+
+  // Get icon for incident type
+  const getIncidentIcon = (incidentNo) => {
+    switch (Number(incidentNo)) {
+      case 1: // Phone usage
+        return <Phone className="w-5 h-5" />;
+      case 4: // Drowsiness
+        return <Moon className="w-5 h-5" />;
+      case 2: // Cigarette
+        return <AlertTriangle className="w-5 h-5" />;
+      case 3: // Seatbelt
+        return <AlertTriangle className="w-5 h-5" />;
+      default:
+        return <AlertTriangle className="w-5 h-5" />;
+    }
+  };
+
+  // Get current date in formatted string
+  const getCurrentDate = () => {
+    return new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  // Navigate to driver details page
+  const handleViewDriverDetails = (driverId) => {
+    if (!driverId) {
+      console.warn("No driver ID provided");
+      return;
+    }
+    router.push(`/driver-details?driverId=${driverId}`);
+  };
+
+  // Data for bar chart - incidents by vehicle
   const barChartData = {
-    labels: analyticsData.trends.map((item) => item.vehicleId),
+    labels: analytics.incidentsByVehicle.map((item) => item.vehicleNumber),
     datasets: [
       {
         label: "Incidents",
-        data: analyticsData.trends.map((item) => item.incidents),
+        data: analytics.incidentsByVehicle.map((item) => item.incidents),
         backgroundColor: "rgba(59, 130, 246, 0.8)", // Blue
         borderColor: "rgb(37, 99, 235)",
         borderWidth: 1,
@@ -288,21 +603,21 @@ const Analytics = () => {
     ],
   };
 
-  // Pie Chart Data
+  // Data for pie chart - incident type breakdown
   const pieChartData = {
     labels: [
-      "Drowsiness",
-      "Cigarette Usage",
-      "Seatbelt Violation",
-      "Phone Usage",
+      getIncidentDisplayName(4), // Drowsiness
+      getIncidentDisplayName(2), // Cigarette Usage
+      getIncidentDisplayName(3), // Seatbelt Violation
+      getIncidentDisplayName(1), // Phone Usage
     ],
     datasets: [
       {
         data: [
-          analyticsData.breakdown.drowsiness,
-          analyticsData.breakdown.cigarette,
-          analyticsData.breakdown.seatbelt,
-          analyticsData.breakdown.phoneUsage,
+          analytics.incidents.drowsiness,
+          analytics.incidents.cigarette,
+          analytics.incidents.seatbelt,
+          analytics.incidents.phoneUsage,
         ],
         backgroundColor: [
           "rgba(255, 152, 0, 0.85)", // Orange for drowsiness
@@ -322,7 +637,7 @@ const Analytics = () => {
     ],
   };
 
-  // Chart Options
+  // Options for bar chart
   const barChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -331,122 +646,155 @@ const Analytics = () => {
       title: {
         display: true,
         text: "Incidents by Vehicle",
-        font: { size: 16 },
-        color: "#ffffff",
+        font: { size: 16, weight: "bold" },
+        color: "#374151",
+        padding: { top: 10, bottom: 20 },
       },
       tooltip: {
         backgroundColor: "rgba(0, 0, 0, 0.8)",
         padding: 12,
+        titleFont: { size: 14 },
+        bodyFont: { size: 13 },
+        titleColor: "white",
+        bodyColor: "white",
+        borderColor: "rgba(255, 255, 255, 0.2)",
+        borderWidth: 1,
       },
     },
     scales: {
       y: {
         beginAtZero: true,
-        ticks: { color: "#9ca3af" },
-        grid: { color: "rgba(255, 255, 255, 0.1)" },
+        ticks: { color: "#6B7280", font: { size: 12 } },
+        grid: { color: "rgba(156, 163, 175, 0.1)", drawBorder: false },
+        border: { display: false },
       },
       x: {
-        ticks: { color: "#9ca3af" },
+        ticks: { color: "#6B7280", font: { size: 12 } },
         grid: { display: false },
+        border: { display: false },
       },
+    },
+    animation: {
+      duration: 1000,
+      easing: "easeOutQuart",
     },
   };
 
+  // Options for pie chart
   const pieChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
         position: "right",
-        labels: { color: "#ffffff", padding: 15 },
+        labels: {
+          color: "#374151",
+          font: { size: 12 },
+          padding: 15,
+          usePointStyle: true,
+          pointStyle: "circle",
+        },
+        align: "center",
       },
       title: {
         display: true,
         text: "Behavior Breakdown",
-        font: { size: 16 },
-        color: "#ffffff",
+        font: { size: 16, weight: "bold" },
+        color: "#374151",
+        padding: { top: 10, bottom: 20 },
       },
       tooltip: {
         backgroundColor: "rgba(0, 0, 0, 0.8)",
         padding: 12,
+        titleFont: { size: 14 },
+        bodyFont: { size: 13 },
       },
+    },
+    animation: {
+      animateRotate: true,
+      animateScale: true,
+    },
+    cutout: "50%",
+    layout: {
+      padding: 10,
     },
   };
 
-  const getSeverityStyle = (severity) => {
-    switch (severity.toLowerCase()) {
-      case "high":
-        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 border-l-4 border-red-500";
-      case "medium":
-        return "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 border-l-4 border-amber-500";
-      case "low":
-        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500";
-      default:
-        return "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border-l-4 border-blue-500";
-    }
+  // Calculate total incidents
+  const totalIncidents =
+    analytics.incidents.drowsiness +
+    analytics.incidents.cigarette +
+    analytics.incidents.seatbelt +
+    analytics.incidents.phoneUsage;
+
+  // Find most common violation type
+  const getMostCommonViolation = () => {
+    const counts = [
+      {
+        type: getIncidentDisplayName(4),
+        incidentNo: 4,
+        count: analytics.incidents.drowsiness,
+      },
+      {
+        type: getIncidentDisplayName(2),
+        incidentNo: 2,
+        count: analytics.incidents.cigarette,
+      },
+      {
+        type: getIncidentDisplayName(3),
+        incidentNo: 3,
+        count: analytics.incidents.seatbelt,
+      },
+      {
+        type: getIncidentDisplayName(1),
+        incidentNo: 1,
+        count: analytics.incidents.phoneUsage,
+      },
+    ];
+
+    return counts.reduce(
+      (max, current) => (current.count > max.count ? current : max),
+      { type: "None", incidentNo: 0, count: 0 }
+    );
   };
 
-  const getSeverityDot = (severity) => {
-    switch (severity.toLowerCase()) {
-      case "high":
-        return "bg-red-500";
-      case "medium":
-        return "bg-amber-500";
-      case "low":
-        return "bg-green-500";
-      default:
-        return "bg-blue-500";
-    }
-  };
-
-  // Find vehicles with highest and lowest incidents
-  const highestIncidentVehicle = analyticsData.vehicles.reduce(
-    (max, vehicle) => (vehicle.incidents > max.incidents ? vehicle : max),
-    { incidents: -1, vehicleNumber: "N/A" }
-  );
-  const lowestIncidentVehicle = analyticsData.vehicles.reduce(
-    (min, vehicle) => (vehicle.incidents < min.incidents ? vehicle : min),
-    { incidents: Infinity, vehicleNumber: "N/A" }
-  );
-
-  // Find most common behavior
-  const mostCommonBehavior = Object.entries(analyticsData.breakdown).reduce(
-    (max, [key, value]) => (value > max.value ? { key, value } : max),
-    { key: "N/A", value: -1 }
-  );
-  const totalIncidents = Object.values(analyticsData.breakdown).reduce(
-    (sum, val) => sum + val,
-    0
-  );
+  const mostCommonViolation = getMostCommonViolation();
   const mostCommonPercentage =
     totalIncidents > 0
-      ? Math.round((mostCommonBehavior.value / totalIncidents) * 100)
+      ? Math.round((mostCommonViolation.count / totalIncidents) * 100)
       : 0;
-  const behaviorLabels = {
-    drowsiness: "Drowsiness",
-    cigarette: "Cigarette Usage",
-    seatbelt: "Seatbelt Violation",
-    phoneUsage: "Phone Usage",
-  };
 
-  const handleViewDriverDetails = (driverId) => {
-    router.push(`/driver-details?driverId=${driverId}`);
-  };
+  // Find vehicles with highest and lowest incidents
+  const vehicleWithMostIncidents =
+    analytics.incidentsByVehicle.length > 0
+      ? analytics.incidentsByVehicle.reduce(
+          (max, vehicle) => (vehicle.incidents > max.incidents ? vehicle : max),
+          { incidents: -1, vehicleNumber: "N/A" }
+        )
+      : { incidents: 0, vehicleNumber: "N/A" };
+
+  const vehicleWithLeastIncidents =
+    analytics.incidentsByVehicle.length > 0
+      ? analytics.incidentsByVehicle.reduce(
+          (min, vehicle) => (vehicle.incidents < min.incidents ? vehicle : min),
+          { incidents: Infinity, vehicleNumber: "N/A" }
+        )
+      : { incidents: 0, vehicleNumber: "N/A" };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Analytics Header */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
           <div className="mb-4 md:mb-0">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
               Safety Analytics Dashboard
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Monitor driver behavior and safety violations in real-time
+              Monitor driver behavior and safety violations
             </p>
           </div>
-          <div className="flex space-x-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Date Range
@@ -472,13 +820,30 @@ const Analytics = () => {
                 className="block w-40 pl-3 pr-8 py-2 text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-primary-500 focus:border-primary-500 rounded-md"
               >
                 <option value="all">All Vehicles</option>
-                {analyticsData.vehicles.map((vehicle) => (
+                {analytics.vehicles.map((vehicle) => (
                   <option key={vehicle.id} value={vehicle.vehicleNumber}>
                     {vehicle.vehicleNumber}
                   </option>
                 ))}
               </select>
             </div>
+            {/* <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Driver
+              </label>
+              <select
+                value={selectedDriver}
+                onChange={(e) => setSelectedDriver(e.target.value)}
+                className="block w-40 pl-3 pr-8 py-2 text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-primary-500 focus:border-primary-500 rounded-md"
+              >
+                <option value="all">All Drivers</option>
+                {analytics.drivers.map((driver) => (
+                  <option key={driver.id} value={driver.driverId}>
+                    {driver.name}
+                  </option>
+                ))}
+              </select>
+            </div> */}
           </div>
         </div>
 
@@ -500,50 +865,83 @@ const Analytics = () => {
           <>
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Most Common Violation
                 </h3>
-                <p className="text-xl font-bold text-red-600 dark:text-red-400 mb-1">
-                  {behaviorLabels[mostCommonBehavior.key] || "N/A"}
+                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mb-1">
+                  {mostCommonViolation.type}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {mostCommonPercentage}% of all violations
                 </p>
               </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Total Violations
                 </h3>
-                <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mb-1">
+                <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mb-1">
                   {totalIncidents}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   In selected period
                 </p>
               </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                  Safest Vehicle
+                  {selectedVehicle === "all"
+                    ? "Safest Vehicle"
+                    : "Vehicle Driver"}
                 </h3>
-                <p className="text-xl font-bold text-green-600 dark:text-green-400 mb-1">
-                  {lowestIncidentVehicle.vehicleNumber}
+                <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
+                  {selectedVehicle === "all"
+                    ? vehicleWithLeastIncidents.vehicleNumber
+                    : analytics.vehicles.length > 0 &&
+                      analytics.vehicles[0].driverName !== "Unassigned"
+                    ? analytics.vehicles[0].driverName
+                    : "No driver assigned"}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {lowestIncidentVehicle.incidents} violations
+                  {selectedVehicle === "all"
+                    ? `${
+                        vehicleWithLeastIncidents.incidents === Infinity
+                          ? 0
+                          : vehicleWithLeastIncidents.incidents
+                      } violations`
+                    : analytics.vehicles.length > 0 &&
+                      analytics.vehicles[0].driverName !== "Unassigned"
+                    ? "Current driver"
+                    : "Vehicle unassigned"}
                 </p>
               </div>
             </div>
 
-            {/* Bar and Pie Charts */}
+            {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               {/* Bar Chart */}
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
-                <Bar data={barChartData} options={barChartOptions} />
+                {analytics.incidentsByVehicle.length > 0 ? (
+                  <Bar data={barChartData} options={barChartOptions} />
+                ) : (
+                  <div className="h-full flex items-center justify-center">
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No incident data available
+                    </p>
+                  </div>
+                )}
               </div>
+
               {/* Pie Chart */}
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
-                <Pie data={pieChartData} options={pieChartOptions} />
+                {totalIncidents > 0 ? (
+                  <Pie data={pieChartData} options={pieChartOptions} />
+                ) : (
+                  <div className="h-full flex items-center justify-center">
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No incident type data available
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -557,162 +955,190 @@ const Analytics = () => {
                     Fleet Performance Metrics
                   </h2>
                 </div>
-                <div className="overflow-x-auto p-6">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-700">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                          ID
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                          Vehicle
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                          Driver
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                          Incidents
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {analyticsData.vehicles.map((vehicle) => (
-                        <tr
-                          key={vehicle.id}
-                          className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                          <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-200">
-                            {vehicle.id}
-                          </td>
-                          <td className="px-4 py-4 text-sm font-medium text-gray-900 dark:text-gray-200">
-                            {vehicle.vehicleNumber}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
-                            {vehicle.driverName}
-                          </td>
-                          <td className="px-4 py-4">
-                            <span
-                              className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                vehicle.status === "Active"
-                                  ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
-                                  : "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400"
-                              }`}
+                <div className="p-6">
+                  {analytics.vehicles.length > 0 ? (
+                    <div
+                      className="overflow-x-auto overflow-y-auto max-h-[400px]"
+                      style={{
+                        scrollbarWidth: "thin",
+                        scrollbarColor: "#CBD5E0 #EDF2F7",
+                      }}
+                    >
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-700">
+                            <th className="sticky top-0 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider bg-gray-50 dark:bg-gray-700">
+                              Vehicle
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                              Driver
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                              Incidents
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                              Action
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                          {analytics.vehicles.map((vehicle) => (
+                            <tr
+                              key={vehicle.id}
+                              className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                             >
-                              {vehicle.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4">
-                            <span
-                              className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
-                                vehicle.incidents === 0
-                                  ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
-                                  : vehicle.incidents < 2
-                                  ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400"
-                                  : "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400"
-                              }`}
-                            >
-                              {vehicle.incidents}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            {vehicle.driverId && (
-                              <button
-                                onClick={() =>
-                                  handleViewDriverDetails(vehicle.driverId)
-                                }
-                                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors duration-200 ease-in-out shadow-sm hover:shadow-md"
-                              >
-                                <Eye className="w-4 h-4 mr-1.5" />
-                                Driver Details
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                              <td className="px-4 py-4 text-sm font-medium text-gray-900 dark:text-gray-200">
+                                {vehicle.vehicleNumber}
+                              </td>
+                              <td className="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                {vehicle.driverName}
+                              </td>
+                              <td className="px-4 py-4">
+                                <span
+                                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    vehicle.status === "Active"
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
+                                      : "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400"
+                                  }`}
+                                >
+                                  {vehicle.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4">
+                                <span
+                                  className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
+                                    vehicle.incidents === 0
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
+                                      : vehicle.incidents < 2
+                                      ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400"
+                                      : "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400"
+                                  }`}
+                                >
+                                  {vehicle.incidents}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 text-right">
+                                {vehicle.driverId && (
+                                  <button
+                                    onClick={() =>
+                                      handleViewDriverDetails(vehicle.driverId)
+                                    }
+                                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors duration-200 ease-in-out shadow-sm hover:shadow-md"
+                                  >
+                                    <Eye className="w-4 h-4 mr-1.5" />
+                                    Driver Details
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-gray-500 dark:text-gray-400">
+                      No vehicle data available
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Incident Timeline */}
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center">
-                  <Bell className="w-5 h-5 text-primary-500 mr-2" />
-                  <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-                    Incident Timeline
-                  </h2>
+                <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                  <div className="flex items-center">
+                    <Bell className="w-5 h-5 text-primary-500 mr-2" />
+                    <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+                      Incident Timeline
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => router.push("/incidents")}
+                    className="flex items-center text-primary-500 hover:text-primary-600 text-sm font-medium"
+                  >
+                    View All
+                    <ArrowRight className="w-4 h-4 ml-1" />
+                  </button>
                 </div>
-                <div className="p-6 space-y-4">
-                  {analyticsData.timeline.length > 0 ? (
-                    analyticsData.timeline.map((incident) => (
-                      <div
-                        key={incident.id}
-                        className={`rounded-lg p-4 ${getSeverityStyle(
-                          incident.severity
-                        )}`}
-                      >
-                        <div className="flex items-start">
-                          <div
-                            className={`p-2 rounded-lg ${
-                              incident.severity === "high"
-                                ? "bg-red-200 dark:bg-red-800/50"
-                                : incident.severity === "medium"
-                                ? "bg-amber-200 dark:bg-amber-800/50"
-                                : "bg-green-200 dark:bg-green-800/50"
-                            } mr-4`}
-                          >
-                            <AlertTriangle className="w-5 h-5" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium text-gray-900 dark:text-gray-200">
-                                {incident.message}
-                              </h4>
-                              <div className="flex items-center space-x-1 text-sm text-gray-500 dark:text-gray-400">
-                                <Clock className="w-4 h-4" />
-                                <span>{incident.timestamp}</span>
+                <div className="p-6">
+                  <div
+                    className="space-y-4 max-h-[400px] overflow-y-auto"
+                    style={{
+                      scrollbarWidth: "thin",
+                      scrollbarColor: "#CBD5E0 #EDF2F7",
+                    }}
+                  >
+                    {analytics.incidentTimeline.length > 0 ? (
+                      analytics.incidentTimeline.map((incident) => (
+                        <div
+                          key={incident.id}
+                          className={`rounded-lg p-4 ${getSeverityStyle(
+                            incident.severity
+                          )}`}
+                        >
+                          <div className="flex items-start">
+                            <div
+                              className={`p-2 rounded-lg ${
+                                incident.severity === "high"
+                                  ? "bg-red-200 dark:bg-red-800/50"
+                                  : incident.severity === "medium"
+                                  ? "bg-amber-200 dark:bg-amber-800/50"
+                                  : "bg-green-200 dark:bg-green-800/50"
+                              } mr-4`}
+                            >
+                              {getIncidentIcon(incident.incidentNo)}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-medium text-gray-900 dark:text-gray-200">
+                                  {incident.message}
+                                </h4>
+                                <div className="flex items-center space-x-1 text-sm text-gray-500 dark:text-gray-400">
+                                  <Clock className="w-4 h-4" />
+                                  <span>{incident.formattedTime}</span>
+                                </div>
+                              </div>
+                              <div className="mt-2 flex items-center">
+                                <div className="text-xs font-medium px-2 py-1 rounded-full bg-white dark:bg-gray-700 flex items-center">
+                                  <span
+                                    className={`w-2 h-2 rounded-full ${getSeverityDot(
+                                      incident.severity
+                                    )} mr-1`}
+                                  ></span>
+                                  {incident.severity.toUpperCase()}
+                                </div>
                               </div>
                             </div>
-                            <div className="mt-2 flex items-center">
-                              <div className="text-xs font-medium px-2 py-1 rounded-full bg-white dark:bg-gray-700 flex items-center">
-                                <span
-                                  className={`w-2 h-2 rounded-full ${getSeverityDot(
-                                    incident.severity
-                                  )} mr-1`}
-                                ></span>
-                                {incident.severity.toUpperCase()}
-                              </div>
-                            </div>
+                          </div>
+                          <div className="flex justify-end mt-3 space-x-2">
+                            {incident.driverId && (
+                              <button
+                                onClick={() =>
+                                  handleViewDriverDetails(incident.driverId)
+                                }
+                                className="flex items-center px-3 py-1 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600"
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                Driver Details
+                              </button>
+                            )}
                           </div>
                         </div>
-                        <div className="flex justify-end mt-3 space-x-2">
-                          <button className="flex items-center px-3 py-1 text-xs font-medium rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600">
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Dismiss
-                          </button>
-                          <button className="flex items-center px-3 py-1 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600">
-                            <Eye className="w-3 h-3 mr-1" />
-                            Driver Details
-                          </button>
-                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center text-gray-500 dark:text-gray-400">
+                        No incidents in the selected period
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-gray-500 dark:text-gray-400">
-                      No incidents in the selected period
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Recommendations */}
+            {/* Safety Recommendations */}
             <div className="bg-gradient-to-r from-primary-500 to-primary-700 rounded-xl p-6 shadow-sm text-white mt-8">
               <h2 className="text-xl font-semibold mb-4">
                 Safety Recommendations
@@ -721,22 +1147,42 @@ const Analytics = () => {
                 <div className="bg-white dark:bg-gray-800 bg-opacity-10 rounded-lg p-4 backdrop-blur-sm text-white">
                   <h3 className="font-medium mb-2 flex items-center">
                     <AlertTriangle className="w-5 h-5 mr-2" />
-                    {mostCommonBehavior.key === "drowsiness"
+                    {mostCommonViolation.incidentNo === 4
                       ? "Implement Rest Break Policy"
-                      : mostCommonBehavior.key === "cigarette"
+                      : mostCommonViolation.incidentNo === 2
                       ? "Enforce No Smoking Policy"
-                      : mostCommonBehavior.key === "seatbelt"
+                      : mostCommonViolation.incidentNo === 3
                       ? "Strengthen Seatbelt Enforcement"
-                      : "Address Phone Usage"}
+                      : mostCommonViolation.incidentNo === 1
+                      ? "Address Phone Usage"
+                      : "Strengthen Safety Protocols"}
                   </h3>
                   <p className="text-sm text-white/90">
-                    {mostCommonBehavior.key === "drowsiness"
+                    {mostCommonViolation.incidentNo === 4
                       ? "Multiple drowsiness incidents detected. Consider implementing mandatory rest breaks for drivers on shifts longer than 4 hours."
-                      : mostCommonBehavior.key === "cigarette"
+                      : mostCommonViolation.incidentNo === 2
                       ? "Cigarette usage violations detected. Implement strict no-smoking policy and provide smoking cessation support."
-                      : mostCommonBehavior.key === "seatbelt"
+                      : mostCommonViolation.incidentNo === 3
                       ? "Seatbelt violations detected. Conduct regular safety checks and implement automatic seatbelt reminder system."
-                      : "Phone usage violations detected. Install phone blocking technology and conduct distraction-free driving training."}
+                      : mostCommonViolation.incidentNo === 1
+                      ? "Phone usage violations detected. Install phone blocking technology and conduct distraction-free driving training."
+                      : "Review and reinforce current safety protocols with all drivers. Consider implementing more frequent safety training."}
+                  </p>
+                </div>
+
+                {/* Additional Safety Tips */}
+                <div className="bg-white dark:bg-gray-800 bg-opacity-10 rounded-lg p-4 backdrop-blur-sm text-white">
+                  <h3 className="font-medium mb-2 flex items-center">
+                    <Info className="w-5 h-5 mr-2" />
+                    Driver Training Program
+                  </h3>
+                  <p className="text-sm text-white/90">
+                    Implement comprehensive safety training focusing on{" "}
+                    {getIncidentDisplayName(
+                      mostCommonViolation.incidentNo
+                    ).toLowerCase()}{" "}
+                    prevention. Schedule regular refresher courses to reinforce
+                    safety protocols.
                   </p>
                 </div>
               </div>

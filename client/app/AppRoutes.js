@@ -20,6 +20,8 @@ import Support from "./components/Support";
 import Settings from "./components/Settings";
 import Notifications from "./components/Notifications";
 import About from "./components/About";
+import AllIncidents from "./components/AllIncidents";
+import DriverDetails from "./components/DriverDetails";
 import { AuthContext } from "./context/AuthContext";
 
 const AppRoutes = () => {
@@ -91,6 +93,14 @@ const AppRoutes = () => {
           title = "DBMS | About";
           description = "Learn about the Driver Behavior Monitoring System";
           break;
+        case "/incidents":
+          title = "DBMS | All Incidents";
+          description = "View and manage all safety incidents";
+          break;
+        case "/driver-details":
+          title = "DBMS | Driver Details";
+          description = "View driver's detailed information and performance";
+          break;
         default:
           title = "DBMS";
           description = "Driver Behavior Monitoring System Application";
@@ -126,6 +136,10 @@ const AppRoutes = () => {
         element={isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />}
       />
       <Route
+        path="/incidents"
+        element={isAuthenticated ? <AllIncidents /> : <Navigate to="/login" />}
+      />
+      <Route
         path="/profile"
         element={isAuthenticated ? <UserProfile /> : <Navigate to="/login" />}
       />
@@ -139,6 +153,10 @@ const AppRoutes = () => {
         element={isAuthenticated ? <Notifications /> : <Navigate to="/login" />}
       />
       <Route path="/about" element={<About />} />
+      <Route
+        path="/driver-details"
+        element={isAuthenticated ? <DriverDetails /> : <Navigate to="/login" />}
+      />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

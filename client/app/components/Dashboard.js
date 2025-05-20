@@ -18,12 +18,17 @@ import {
   UserCircle,
   Phone,
   Moon,
+  Cigarette,
+  AlertTriangle as BeltIcon,
+  Info,
+  Calendar,
+  Shield,
 } from "lucide-react";
 import {
   getDashboardMetrics,
   getDrivers,
   getVehicles,
-  normalizeIncidentType,
+  getIncidents,
 } from "../utils/api";
 import { useRouter } from "next/navigation";
 
@@ -37,13 +42,61 @@ const Dashboard = () => {
   });
   const [metrics, setMetrics] = useState({
     activeDrivers: 0,
+    totalDrivers: 0,
     totalVehicles: 0,
     recentIncidents: 0,
   });
   const [activityData, setActivityData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [safetyRecommendation, setSafetyRecommendation] = useState({
+    title: "",
+    description: "",
+    incidentNo: 3, // Default to seatbelt
+  });
+
+  // Date filter state
+  const [startDate, setStartDate] = useState(() => {
+    // Default to 7 days ago
+    const date = new Date();
+    date.setDate(date.getDate() - 7);
+    return date.toISOString().split("T")[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    // Default to today
+    return new Date().toISOString().split("T")[0];
+  });
+
   const router = useRouter();
+
+  // Map incident numbers to their respective types and messages
+  const incidentTypeMap = {
+    1: {
+      type: "PHONE_USAGE",
+      message: "Phone usage detected",
+      severity: "high",
+    },
+    2: {
+      type: "CIGARETTE",
+      message: "Cigarette usage detected",
+      severity: "medium",
+    },
+    3: {
+      type: "SEATBELT",
+      message: "Seatbelt violation detected",
+      severity: "medium",
+    },
+    4: {
+      type: "DROWSINESS",
+      message: "Driver drowsiness detected",
+      severity: "high",
+    },
+  };
+
+  // Get incident type info based on incident_no
+  const getIncidentTypeInfo = (incidentNo) => {
+    return incidentTypeMap[incidentNo] || null;
+  };
 
   // Fetch dashboard metrics, alerts, and activity
   useEffect(() => {
@@ -58,10 +111,44 @@ const Dashboard = () => {
         const metricsData = await getDashboardMetrics();
         const drivers = await getDrivers();
         const vehicles = await getVehicles();
+        // Fetch incidents directly
+        const incidents = await getIncidents();
+
+        // Filter incidents by date range if provided
+        const filteredIncidents =
+          incidents?.filter((incident) => {
+            if (!startDate || !endDate) return true;
+
+            const incidentDate = incident.incident_date || incident.created_at;
+            if (!incidentDate) return true;
+
+            const date = new Date(incidentDate);
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999); // Include the entire end day
+
+            return date >= start && date <= end;
+          }) || [];
+
+        // Count total and active drivers
+        const totalDrivers = drivers.drivers.length;
+        const activeDrivers = drivers.drivers.filter(
+          (driver) => driver.vehicle && driver.vehicle !== "None"
+        ).length;
 
         // Calculate total trips (sum of last_trip counts from vehicles)
         const totalTrips = vehicles.vehicles.reduce((sum, vehicle) => {
-          return vehicle.last_trip ? sum + 1 : sum;
+          if (!vehicle.last_trip) return sum;
+
+          const tripDate = new Date(vehicle.last_trip);
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+
+          if (tripDate >= start && tripDate <= end) {
+            return sum + 1;
+          }
+          return sum;
         }, 0);
 
         // Calculate average driver score
@@ -76,144 +163,129 @@ const Dashboard = () => {
             : 0;
 
         // Calculate safe driving percentage (trips without incidents)
-        const incidentCount = metricsData.incidentCount || 0;
-        const safeDrivingPercentage =
-          totalTrips > 0
-            ? Math.round(((totalTrips - incidentCount) / totalTrips) * 100)
-            : 0;
+        let safeDrivingPercentage = 0;
+        if (totalTrips > 0) {
+          // Calculate incidents per trip (as a percentage)
+          const incidentsPerTrip =
+            (filteredIncidents.length / totalTrips) * 100;
+          // Invert to get safety percentage (cap at 100%)
+          safeDrivingPercentage = Math.min(
+            Math.max(0, Math.round(100 - incidentsPerTrip)),
+            100
+          );
+        }
 
         // Update metrics state
         setMetrics({
-          activeDrivers: metricsData.activeDrivers || 0,
+          activeDrivers,
+          totalDrivers,
           totalVehicles: metricsData.vehicles || 0,
-          recentIncidents: metricsData.recentIncidents || 0,
+          recentIncidents: filteredIncidents.length || 0,
         });
 
-        // Simulate alerts based on driver incidents
-        const alerts = drivers.drivers
-          .filter((driver) => driver.incidents > 0)
-          .map((driver, index) => {
-            // Get standard incident types based on incident history
-            const standardIncidentTypes = [
-              "PHONE_USAGE",
-              "DROWSINESS",
-              "CIGARETTE",
-              "SEATBELT",
-            ];
-            const incidentType = driver.incident_type
-              ? normalizeIncidentType(driver.incident_type)
-              : standardIncidentTypes[index % standardIncidentTypes.length];
+        // Track incidents by number for analytics
+        const incidentsByNumber = {
+          1: 0, // Phone usage
+          2: 0, // Cigarette
+          3: 0, // Seatbelt
+          4: 0, // Drowsiness
+        };
 
-            // Determine message and severity based on normalized incident type
-            const getMessage = (type) => {
-              switch (type) {
-                case "PHONE_USAGE":
-                  return "Phone usage detected";
-                case "DROWSINESS":
-                  return "Driver drowsiness detected";
-                case "CIGARETTE":
-                  return "Cigarette usage detected";
-                case "SEATBELT":
-                  return "Seatbelt violation detected";
-                default:
-                  return "Safety violation detected";
-              }
-            };
+        // Process alerts directly from incidents data
+        let alerts = [];
 
-            const getSeverity = (type) => {
-              switch (type) {
-                case "PHONE_USAGE":
-                  return "high";
-                case "DROWSINESS":
-                  return "high";
-                case "CIGARETTE":
-                  return "medium";
-                case "SEATBELT":
-                  return "medium";
-                default:
-                  return "low";
-              }
-            };
+        if (filteredIncidents && filteredIncidents.length > 0) {
+          // Filter incidents with valid incident_no values (1-4)
+          const validIncidents = filteredIncidents.filter(
+            (incident) =>
+              incident.incident_no && incidentTypeMap[incident.incident_no]
+          );
+
+          // Count incidents by type
+          validIncidents.forEach((incident) => {
+            if (
+              incident.incident_no &&
+              incidentsByNumber[incident.incident_no] !== undefined
+            ) {
+              incidentsByNumber[incident.incident_no]++;
+            }
+          });
+
+          // Get the most recent 3 incidents
+          alerts = validIncidents.slice(0, 3).map((incident, index) => {
+            // Get incident type info based on incident_no
+            const incidentInfo = getIncidentTypeInfo(incident.incident_no);
 
             return {
               id: index + 1,
-              message: `Driver ${driver.driver_id}: ${getMessage(
-                incidentType
-              )}`,
-              timestamp: new Date().toLocaleTimeString(),
-              severity: getSeverity(incidentType),
-              driverId: driver.driver_id,
-              vehicleId: driver.vehicle || "N/A",
-              type: incidentType.toLowerCase(),
+              message: `Driver ${incident.driver_id}: ${incidentInfo.message}`,
+              timestamp: new Date(incident.created_at).toLocaleTimeString(),
+              severity: incidentInfo.severity,
+              driverId: incident.driver_id,
+              vehicleId: incident.vehicle_id,
+              type: incidentInfo.type.toLowerCase(),
+              incident_no: incident.incident_no,
             };
-          })
-          .slice(0, 3);
+          });
+        }
 
-        // Simulate activity data based on vehicle trips and driver incidents
+        // Determine the most common violation type
+        let mostCommonIncidentNo = 3; // Default to seatbelt
+        let maxCount = 0;
+
+        for (const [incidentNo, count] of Object.entries(incidentsByNumber)) {
+          if (count > maxCount) {
+            maxCount = count;
+            mostCommonIncidentNo = Number(incidentNo);
+          }
+        }
+
+        // Set safety recommendation based on most common violation
+        setSafetyRecommendation(getRecommendationByType(mostCommonIncidentNo));
+
+        // Process activity data based on vehicle trips and incidents
         const activity = [
           ...vehicles.vehicles
-            .filter((vehicle) => vehicle.last_trip)
+            .filter((vehicle) => {
+              if (!vehicle.last_trip) return false;
+              const tripDate = new Date(vehicle.last_trip);
+              const start = new Date(startDate);
+              const end = new Date(endDate);
+              end.setHours(23, 59, 59, 999);
+              return tripDate >= start && tripDate <= end;
+            })
             .map((vehicle, index) => ({
               id: `trip-${index}`,
               type: "safe",
               message: `Vehicle ${vehicle.vehicle_number} completed trip safely`,
               timestamp: new Date(vehicle.last_trip).toLocaleTimeString(),
             })),
-          ...drivers.drivers
-            .filter((driver) => driver.incidents > 0)
-            .map((driver, index) => {
-              // Use standardized incident types
-              const standardIncidentTypes = [
-                "PHONE_USAGE",
-                "DROWSINESS",
-                "CIGARETTE",
-                "SEATBELT",
-              ];
-              const incidentType = driver.incident_type
-                ? normalizeIncidentType(driver.incident_type)
-                : standardIncidentTypes[index % standardIncidentTypes.length];
+          ...(filteredIncidents || [])
+            .filter(
+              (incident) =>
+                incident.incident_no && incidentTypeMap[incident.incident_no]
+            )
+            .map((incident, index) => {
+              // Get incident type info based on incident_no
+              const incidentInfo = getIncidentTypeInfo(incident.incident_no);
 
-              const getMessage = (type) => {
-                switch (type) {
-                  case "PHONE_USAGE":
-                    return "Phone usage detected";
-                  case "DROWSINESS":
-                    return "Driver drowsiness detected";
-                  case "CIGARETTE":
-                    return "Cigarette usage detected";
-                  case "SEATBELT":
-                    return "Seatbelt violation detected";
-                  default:
-                    return "Safety violation detected";
-                }
-              };
+              // Skip if incident number is not in our supported list (1-4)
+              if (!incidentInfo) return null;
 
-              // Determine severity based on incident type
-              const getSeverity = (type) => {
-                switch (type) {
-                  case "PHONE_USAGE":
-                    return "danger";
-                  case "DROWSINESS":
-                    return "danger";
-                  case "CIGARETTE":
-                    return "warning";
-                  case "SEATBELT":
-                    return "warning";
-                  default:
-                    return "warning";
-                }
-              };
+              // Determine activity type based on severity
+              const activityType =
+                incidentInfo.severity === "high" ? "danger" : "warning";
 
               return {
                 id: `incident-${index}`,
-                type: getSeverity(incidentType),
-                message: `Driver ${driver.driver_id}: ${getMessage(
-                  incidentType
-                )}`,
-                timestamp: new Date().toLocaleTimeString(),
+                type: activityType,
+                message: `Driver ${incident.driver_id}: ${incidentInfo.message}`,
+                timestamp: new Date(incident.created_at).toLocaleTimeString(),
+                incident_no: incident.incident_no,
               };
-            }),
-        ].slice(0, 3);
+            })
+            .filter(Boolean), // Remove null entries
+        ].slice(0, 20); // Show latest 20 recent activities
 
         setDashboardData({
           totalTrips,
@@ -231,20 +303,59 @@ const Dashboard = () => {
     };
 
     fetchData();
+  }, [startDate, endDate]);
 
-    // Empty dependency array ensures it only runs once when component mounts
-  }, []);
+  // Get recommendation based on incident number
+  const getRecommendationByType = (incidentNo) => {
+    switch (incidentNo) {
+      case 4: // Drowsiness
+        return {
+          title: "Implement Rest Break Policy",
+          description:
+            "Multiple drowsiness incidents detected. Consider implementing mandatory rest breaks for drivers on shifts longer than 4 hours.",
+          incidentNo: 4,
+        };
+      case 2: // Cigarette
+        return {
+          title: "Enforce No Smoking Policy",
+          description:
+            "Cigarette usage violations detected. Implement strict no-smoking policy and provide smoking cessation support.",
+          incidentNo: 2,
+        };
+      case 3: // Seatbelt
+        return {
+          title: "Strengthen Seatbelt Enforcement",
+          description:
+            "Seatbelt violations detected. Conduct regular safety checks and implement automatic seatbelt reminder system.",
+          incidentNo: 3,
+        };
+      case 1: // Phone usage
+        return {
+          title: "Address Phone Usage",
+          description:
+            "Phone usage violations detected. Install phone blocking technology and conduct distraction-free driving training.",
+          incidentNo: 1,
+        };
+      default:
+        return {
+          title: "Strengthen Safety Protocols",
+          description:
+            "Review and reinforce current safety protocols with all drivers. Consider implementing more frequent safety training.",
+          incidentNo: 3,
+        };
+    }
+  };
 
-  const getAlertIcon = (type) => {
-    switch (type) {
-      case "phone_usage":
+  const getAlertIcon = (incident_no) => {
+    switch (Number(incident_no)) {
+      case 1: // Phone usage
         return <Phone className="w-5 h-5" />;
-      case "drowsiness":
+      case 4: // Drowsiness
         return <Moon className="w-5 h-5" />;
-      case "cigarette":
-        return <AlertTriangle className="w-5 h-5" />;
-      case "seatbelt":
-        return <AlertTriangle className="w-5 h-5" />;
+      case 2: // Cigarette
+        return <Cigarette className="w-5 h-5" />;
+      case 3: // Seatbelt
+        return <BeltIcon className="w-5 h-5" />;
       default:
         return <AlertTriangle className="w-5 h-5" />;
     }
@@ -298,6 +409,10 @@ const Dashboard = () => {
     router.push(`/driver-details?driverId=${driverId}`);
   };
 
+  const handleViewAllIncidents = () => {
+    router.push("/incidents");
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -331,6 +446,42 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {/* Date Filter */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 p-4 mb-6">
+          <div className="flex flex-col md:flex-row items-center justify-between">
+            <div className="flex items-center mb-4 md:mb-0">
+              <Calendar className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+              <h3 className="text-md font-medium text-gray-700 dark:text-gray-300">
+                Filter by Date Range
+              </h3>
+            </div>
+            <div className="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-4 w-full md:w-auto">
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="w-12 h-12 border-4 border-gray-200 border-t-primary-500 rounded-full animate-spin mb-4"></div>
@@ -360,7 +511,13 @@ const Dashboard = () => {
                   {dashboardData.totalTrips}
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Last 24 hours
+                  {startDate === endDate
+                    ? `On ${new Date(startDate).toLocaleDateString()}`
+                    : `From ${new Date(
+                        startDate
+                      ).toLocaleDateString()} to ${new Date(
+                        endDate
+                      ).toLocaleDateString()}`}
                 </p>
               </div>
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6 border border-gray-100 dark:border-gray-700">
@@ -405,11 +562,28 @@ const Dashboard = () => {
                   <Activity className="w-8 h-8 text-primary-500" />
                 </div>
                 <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                  {metrics.activeDrivers}
+                  {metrics.activeDrivers}/{metrics.totalDrivers}
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Currently on duty
+                  {Math.round(
+                    (metrics.activeDrivers /
+                      Math.max(metrics.totalDrivers, 1)) *
+                      100
+                  )}
+                  % drivers currently assigned
                 </p>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-4">
+                  <div
+                    className="h-2 rounded-full bg-primary-500"
+                    style={{
+                      width: `${
+                        (metrics.activeDrivers /
+                          Math.max(metrics.totalDrivers, 1)) *
+                        100
+                      }%`,
+                    }}
+                  ></div>
+                </div>
               </div>
             </div>
 
@@ -425,17 +599,23 @@ const Dashboard = () => {
                         Safety Violations
                       </h2>
                     </div>
-                    <Link
-                      to="/alerts"
+                    <button
+                      onClick={handleViewAllIncidents}
                       className="flex items-center text-primary-500 hover:text-primary-600 text-sm font-medium"
                     >
                       View All
                       <ArrowRight className="w-4 h-4 ml-1" />
-                    </Link>
+                    </button>
                   </div>
                   <div className="p-6">
                     {dashboardData.alerts && dashboardData.alerts.length > 0 ? (
-                      <div className="space-y-4">
+                      <div
+                        className="space-y-4 max-h-[400px] overflow-y-auto pr-2"
+                        style={{
+                          scrollbarWidth: "thin",
+                          scrollbarColor: "#CBD5E0 #EDF2F7",
+                        }}
+                      >
                         {dashboardData.alerts.map((alert) => (
                           <div
                             key={alert.id}
@@ -453,7 +633,7 @@ const Dashboard = () => {
                                     : "bg-green-200"
                                 } mr-4`}
                               >
-                                {getAlertIcon(alert.type)}
+                                {getAlertIcon(alert.incident_no)}
                               </div>
                               <div className="flex-1">
                                 <div className="flex items-center justify-between">
@@ -516,10 +696,24 @@ const Dashboard = () => {
 
               {/* Recent Activity */}
               <div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
-                  <div className="relative">
-                    <div className="absolute left-5 top-0 h-full w-0.5 bg-gray-200 dark:bg-gray-700"></div>
-                    <div className="space-y-6">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                    <div className="flex items-center">
+                      <Calendar className="w-5 h-5 text-primary-500 mr-2" />
+                      <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+                        Recent Activity
+                      </h2>
+                    </div>
+                  </div>
+                  <div className="relative p-6">
+                    <div className="absolute left-11 top-6 h-[calc(100%-48px)] w-0.5 bg-gray-200 dark:bg-gray-700"></div>
+                    <div
+                      className="space-y-6 max-h-[400px] overflow-y-auto pr-2"
+                      style={{
+                        scrollbarWidth: "thin",
+                        scrollbarColor: "#CBD5E0 #EDF2F7",
+                      }}
+                    >
                       {activityData.length > 0 ? (
                         activityData.map((activity) => (
                           <div

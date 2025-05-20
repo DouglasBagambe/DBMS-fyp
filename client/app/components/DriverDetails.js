@@ -2,6 +2,7 @@
 "use client";
 import React, { useState, useEffect, useContext } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { AuthContext } from "../context/AuthContext";
 import {
   UserCircle,
@@ -19,16 +20,22 @@ import {
   Shield,
   Activity,
   MapPin,
+  Moon,
+  Cigarette,
+  AlertTriangle as BeltIcon,
 } from "lucide-react";
 import {
   getDrivers,
   updateDriver,
   deleteDriver,
-  normalizeIncidentType,
+  getIncidents,
 } from "../utils/api";
 
-const DriverDetails = ({ driverId }) => {
+const DriverDetails = ({ driverId: propDriverId }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlDriverId = searchParams ? searchParams.get("driverId") : null;
+  const driverId = propDriverId || urlDriverId;
   const { user } = useContext(AuthContext);
   const [driver, setDriver] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -41,26 +48,114 @@ const DriverDetails = ({ driverId }) => {
     vehicleId: null,
   });
 
-  // Data cache for driver details
-  const dataCache = {
-    driverLoaded: false,
+  // Track fetch attempts to prevent infinite loops
+  const [fetchAttempts, setFetchAttempts] = useState(0);
+
+  // Map incident numbers to their respective types and messages
+  const incidentTypeMap = {
+    1: {
+      type: "PHONE_USAGE",
+      message: "Phone usage detected",
+      severity: "high",
+      weight: 5, // Most severe - direct distraction
+      icon: <Phone className="w-5 h-5" />,
+    },
+    2: {
+      type: "CIGARETTE",
+      message: "Cigarette usage detected",
+      severity: "medium",
+      weight: 4, // Very severe - distraction and health risk
+      icon: <Cigarette className="w-5 h-5" />,
+    },
+    3: {
+      type: "SEATBELT",
+      message: "Seatbelt violation detected",
+      severity: "medium",
+      weight: 3, // Moderate - safety equipment
+      icon: <BeltIcon className="w-5 h-5" />,
+    },
+    4: {
+      type: "DROWSINESS",
+      message: "Driver drowsiness detected",
+      severity: "high",
+      weight: 4, // Severe - affects alertness
+      icon: <Moon className="w-5 h-5" />,
+    },
+  };
+
+  // Helper function to get incident type info based on incident_no
+  const getIncidentTypeInfo = (incidentNo) => {
+    return incidentTypeMap[incidentNo] || null;
+  };
+
+  // Convert between incident_type strings and incident_no numbers
+  const normalizeIncidentType = (value) => {
+    // If it's already a number between 1-4, return it
+    if (typeof value === "number" && value >= 1 && value <= 4) {
+      return value;
+    }
+
+    // If it's a string that can be parsed directly to a valid incident number
+    if (typeof value === "string") {
+      const num = parseInt(value, 10);
+      if (!isNaN(num) && num >= 1 && num <= 4) {
+        return num;
+      }
+
+      // Convert to lowercase for case-insensitive matching of text types
+      const lowerType = value.toLowerCase().trim();
+
+      // Map text descriptions to incident numbers
+      if (lowerType.includes("phone") || lowerType === "phone usage") {
+        return 1; // Phone usage
+      }
+
+      if (lowerType.includes("cigarette") || lowerType.includes("smoking")) {
+        return 2; // Cigarette
+      }
+
+      if (
+        lowerType.includes("seatbelt") ||
+        lowerType.includes("belt") ||
+        lowerType === "seatbelt absence" ||
+        lowerType === "no seatbelt"
+      ) {
+        return 3; // Seatbelt
+      }
+
+      if (
+        lowerType.includes("sleep") ||
+        lowerType.includes("drowsy") ||
+        lowerType === "sleepy" ||
+        lowerType === "drowsiness"
+      ) {
+        return 4; // Drowsiness
+      }
+    }
+
+    // Default to seatbelt (3) as most common violation if we can't determine
+    console.log("Unknown incident type, defaulting to Seatbelt (3):", value);
+    return 3;
   };
 
   // Calculate safety score based on incidents
-  const calculateSafetyScore = (incidents, incidentType) => {
+  const calculateSafetyScore = (incidents, incidentNumber) => {
     if (!incidents || incidents === 0) return 100;
 
-    // Define severity weights for the four standard incident types
-    const incidentWeights = {
-      PHONE_USAGE: 5, // Most severe
-      CIGARETTE: 4, // High severity
-      DROWSINESS: 4, // High severity
-      SEATBELT: 3, // Medium severity
-      OTHER: 1,
-    };
+    // Handle both number and string input for incidentNumber
+    let incidentNo;
+    if (
+      typeof incidentNumber === "string" ||
+      typeof incidentNumber === "number"
+    ) {
+      incidentNo = normalizeIncidentType(incidentNumber);
+    } else {
+      incidentNo = 3; // Default to seatbelt if undefined or invalid
+    }
 
-    const normalizedType = normalizeIncidentType(incidentType);
-    const weight = incidentWeights[normalizedType] || incidentWeights.OTHER;
+    // Get the weight for this incident type, default to 1 if not found
+    const weight = incidentTypeMap[incidentNo]?.weight || 1;
+
     const baseReduction = incidents * weight;
     const diminishingFactor = Math.log10(incidents + 1);
     const totalReduction = baseReduction * diminishingFactor;
@@ -68,50 +163,45 @@ const DriverDetails = ({ driverId }) => {
   };
 
   // Get incident severity level
-  const getIncidentSeverity = (incidentType) => {
-    const normalizedType = normalizeIncidentType(incidentType);
-
-    switch (normalizedType) {
-      case "PHONE_USAGE":
-        return "high";
-      case "DROWSINESS":
-        return "high";
-      case "CIGARETTE":
-        return "medium";
-      case "SEATBELT":
-        return "medium";
-      default:
-        return "low";
-    }
+  const getIncidentSeverity = (incidentNo) => {
+    const info = getIncidentTypeInfo(Number(incidentNo));
+    return info ? info.severity : "low";
   };
 
   // Get user-friendly incident message
-  const getIncidentMessage = (incidentType) => {
-    const normalizedType = normalizeIncidentType(incidentType);
+  const getIncidentMessage = (incidentNo) => {
+    const info = getIncidentTypeInfo(Number(incidentNo));
+    return info ? info.message : "Safety violation detected";
+  };
 
-    switch (normalizedType) {
-      case "PHONE_USAGE":
-        return "Phone usage detected";
-      case "DROWSINESS":
-        return "Driver drowsiness detected";
-      case "CIGARETTE":
-        return "Cigarette usage detected";
-      case "SEATBELT":
-        return "Seatbelt violation detected";
-      default:
-        return "Safety violation detected";
-    }
+  // Get incident icon based on incident type
+  const getIncidentIcon = (incidentNo) => {
+    const info = getIncidentTypeInfo(Number(incidentNo));
+    return info ? info.icon : <AlertTriangle className="w-5 h-5" />;
   };
 
   // Fetch driver details - use the getDrivers() API instead of individual fetch
   useEffect(() => {
     const fetchDriverData = async () => {
-      if (loading || !driverId || dataCache.driverLoaded) return;
+      if (loading || !driverId) return;
+
+      // Prevent excessive fetch attempts
+      if (fetchAttempts > 3) {
+        setError("Failed to load driver data after multiple attempts.");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
       try {
-        const driverData = await getDrivers();
+        console.log(`Fetching data for driver: ${driverId}`);
+        // Get both driver data and incidents
+        const [driverData, incidentsData] = await Promise.all([
+          getDrivers(),
+          getIncidents(),
+        ]);
 
         if (driverData && driverData.drivers && driverData.drivers.length > 0) {
           const foundDriver = driverData.drivers.find(
@@ -119,72 +209,111 @@ const DriverDetails = ({ driverId }) => {
           );
 
           if (foundDriver) {
-            // Process incidents into activity items
-            let activities = [];
+            console.log("Found driver:", foundDriver);
 
-            // If incidents_list is provided, use it directly
-            if (
-              foundDriver.incidents_list &&
-              foundDriver.incidents_list.length > 0
-            ) {
-              activities = foundDriver.incidents_list
-                .filter((incident) => {
-                  // Only include the four standard incident types
-                  const normalizedType = normalizeIncidentType(
-                    incident.incident_type
-                  );
-                  return [
-                    "PHONE_USAGE",
-                    "DROWSINESS",
-                    "CIGARETTE",
-                    "SEATBELT",
-                  ].includes(normalizedType);
-                })
-                .map((incident) => ({
-                  id: incident.id,
-                  message: getIncidentMessage(incident.incident_type),
-                  severity: getIncidentSeverity(incident.incident_type),
-                  timestamp: new Date(
-                    incident.incident_date || incident.created_at
-                  ).toLocaleString(),
-                  type: normalizeIncidentType(
-                    incident.incident_type
-                  ).toLowerCase(),
-                }))
-                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            }
-            // If recent_activity is provided, use that instead
-            else if (
-              foundDriver.recent_activity &&
-              foundDriver.recent_activity.length > 0
-            ) {
-              activities = foundDriver.recent_activity
-                .filter((activity) => {
-                  // Only include the four standard incident types
-                  const normalizedType = normalizeIncidentType(
-                    activity.incident_type
-                  );
-                  return [
-                    "PHONE_USAGE",
-                    "DROWSINESS",
-                    "CIGARETTE",
-                    "SEATBELT",
-                  ].includes(normalizedType);
-                })
-                .map((activity) => ({
-                  id: activity.id,
-                  message: getIncidentMessage(activity.incident_type),
-                  severity: getIncidentSeverity(activity.incident_type),
-                  timestamp: new Date(
-                    activity.incident_date || activity.created_at
-                  ).toLocaleString(),
-                  type: normalizeIncidentType(
-                    activity.incident_type
-                  ).toLowerCase(),
-                }))
-                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            // Ensure we have incidents data and it's an array
+            if (!incidentsData || !Array.isArray(incidentsData)) {
+              console.error(
+                "Incidents data is missing or not an array",
+                incidentsData
+              );
+              throw new Error("Failed to load incidents data");
             }
 
+            // Log raw incidents data for debugging
+            console.log(
+              `Raw incidents data (total ${incidentsData.length}):`,
+              incidentsData.slice(0, 5)
+            );
+
+            // Filter incidents for this driver - log all matching driver_id values
+            console.log(
+              "Looking for incidents with driver_id:",
+              foundDriver.driver_id
+            );
+            console.log(
+              "Sample incident driver_ids:",
+              incidentsData.slice(0, 10).map((i) => i.driver_id)
+            );
+
+            // Filter incidents for this specific driver only
+            const driverIncidents = incidentsData.filter(
+              (incident) =>
+                incident.driver_id &&
+                String(incident.driver_id) === String(foundDriver.driver_id)
+            );
+
+            console.log(
+              `Found ${driverIncidents.length} incidents for driver ${foundDriver.driver_id}`
+            );
+            console.log(
+              "Sample driver incidents:",
+              driverIncidents.slice(0, 3)
+            );
+
+            // Convert incidents to activity items with all required properties
+            const activities = driverIncidents
+              .filter((incident) => {
+                // Make sure incident has a valid incident_no
+                const incidentNo = incident.incident_no
+                  ? Number(incident.incident_no)
+                  : 0;
+                // Log invalid incidents for debugging
+                if (incidentNo < 1 || incidentNo > 4) {
+                  console.warn(
+                    `Invalid incident_no: ${incident.incident_no} for incident:`,
+                    incident
+                  );
+                }
+                return incidentNo >= 1 && incidentNo <= 4;
+              })
+              .map((incident) => ({
+                id:
+                  incident.id ||
+                  `incident-${Math.random().toString(36).substr(2, 9)}`,
+                incidentNo: Number(incident.incident_no),
+                message: getIncidentMessage(incident.incident_no),
+                severity: getIncidentSeverity(incident.incident_no),
+                timestamp: new Date(
+                  incident.created_at || new Date()
+                ).toLocaleString(),
+                type:
+                  incidentTypeMap[
+                    Number(incident.incident_no)
+                  ]?.type?.toLowerCase() || "unknown",
+                vehicleId: incident.vehicle_id,
+                date: incident.created_at,
+              }))
+              .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            console.log(
+              `Processed ${activities.length} activities for display`
+            );
+
+            // Calculate total incidents
+            const totalIncidents = driverIncidents.length;
+
+            // Calculate most common incident type
+            const incidentTypeCount = {};
+            driverIncidents.forEach((incident) => {
+              const incidentNo = Number(incident.incident_no);
+              if (incidentNo >= 1 && incidentNo <= 4) {
+                incidentTypeCount[incidentNo] =
+                  (incidentTypeCount[incidentNo] || 0) + 1;
+              }
+            });
+
+            let mostCommonIncidentType = 3; // Default to seatbelt
+            let maxCount = 0;
+
+            Object.entries(incidentTypeCount).forEach(([type, count]) => {
+              if (count > maxCount) {
+                maxCount = count;
+                mostCommonIncidentType = Number(type);
+              }
+            });
+
+            // Create complete driver object with all required properties
             const driverObj = {
               id: foundDriver.id,
               driverId: foundDriver.driver_id,
@@ -193,16 +322,14 @@ const DriverDetails = ({ driverId }) => {
               vehicle: foundDriver.vehicle || "None",
               vehicleId: foundDriver.vehicle_id || null,
               totalTrips: foundDriver.total_trips || 0,
-              incidents: foundDriver.incidents || 0,
-              incidentType: normalizeIncidentType(
-                foundDriver.incident_type || "OTHER"
-              ),
+              incidents: totalIncidents || foundDriver.incidents || 0,
+              incidentType: mostCommonIncidentType || 3,
               recentActivity: activities,
               createdAt: foundDriver.created_at || new Date().toISOString(),
               lastLogin: foundDriver.last_login,
               score: calculateSafetyScore(
-                foundDriver.incidents,
-                foundDriver.incident_type
+                totalIncidents || foundDriver.incidents || 0,
+                mostCommonIncidentType || 3
               ),
             };
 
@@ -212,7 +339,6 @@ const DriverDetails = ({ driverId }) => {
               phoneNumber: driverObj.phoneNumber || "",
               vehicleId: driverObj.vehicleId || null,
             });
-            dataCache.driverLoaded = true;
           } else {
             throw new Error(`Driver with ID ${driverId} not found`);
           }
@@ -222,6 +348,7 @@ const DriverDetails = ({ driverId }) => {
       } catch (err) {
         console.error("Error fetching driver details:", err);
         setError(err.message || "Failed to load driver details");
+        setFetchAttempts((prevAttempts) => prevAttempts + 1);
       } finally {
         setLoading(false);
       }
@@ -235,7 +362,7 @@ const DriverDetails = ({ driverId }) => {
     setLoading(true);
     setError(null);
     try {
-      const updatedDriver = await updateDriver(driverId, {
+      const updatedDriver = await updateDriver(driver.id, {
         name: editForm.name,
         phone: editForm.phoneNumber, // Changed from phoneNumber to phone to match backend
         vehicleId: editForm.vehicleId === "None" ? null : editForm.vehicleId,
@@ -276,22 +403,22 @@ const DriverDetails = ({ driverId }) => {
 
   const getScoreColor = (score) => {
     return score >= 90
-      ? "text-green-600"
+      ? "text-green-600 dark:text-green-400"
       : score >= 70
-      ? "text-amber-600"
-      : "text-red-600";
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-red-600 dark:text-red-400";
   };
 
   const getSeverityStyle = (severity) => {
     switch (severity) {
       case "high":
-        return "bg-red-100 text-red-800 border-1-4 border-red-500";
+        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-l-4 border-red-500";
       case "medium":
-        return "bg-amber-100 text-amber-800 border-1-4 border-amber-500";
+        return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-l-4 border-amber-500";
       case "low":
-        return "bg-green-100 text-green-800 border-1-4 border-green-500";
+        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-l-4 border-green-500";
       default:
-        return "bg-blue-100 text-blue-800 border-1-4 border-blue-500";
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-l-4 border-blue-500";
     }
   };
 
@@ -306,7 +433,12 @@ const DriverDetails = ({ driverId }) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-gray-200 border-t-primary-500 rounded-full animate-spin"></div>
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto border-4 border-gray-200 border-t-primary-500 rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">
+            Loading driver details...
+          </p>
+        </div>
       </div>
     );
   }
@@ -314,10 +446,21 @@ const DriverDetails = ({ driverId }) => {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="bg-red-50 dark:bg-red-900/20 border-1-4 border-red-500 p-4 rounded-md">
+        <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-6 rounded-md max-w-lg">
           <div className="flex items-center">
-            <AlertTriangle className="w-5 h-5 text-red-500 mr-2" />
-            <p className="text-red-700 dark:text-red-400">{error}</p>
+            <AlertTriangle className="w-8 h-8 text-red-500 mr-4" />
+            <div>
+              <h3 className="text-lg font-medium text-red-800 dark:text-red-400 mb-2">
+                Error Loading Driver
+              </h3>
+              <p className="text-red-700 dark:text-red-300">{error}</p>
+              <button
+                onClick={handleBack}
+                className="mt-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
+              >
+                Go Back
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -327,12 +470,24 @@ const DriverDetails = ({ driverId }) => {
   if (!driver) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-1-4 border-yellow-500 p-4 rounded-md">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 p-6 rounded-md max-w-lg">
           <div className="flex items-center">
-            <AlertTriangle className="w-5 h-5 text-yellow-500 mr-2" />
-            <p className="text-yellow-700 dark:text-yellow-400">
-              Driver not found
-            </p>
+            <AlertTriangle className="w-8 h-8 text-yellow-500 mr-4" />
+            <div>
+              <h3 className="text-lg font-medium text-yellow-800 dark:text-yellow-400 mb-2">
+                Driver Not Found
+              </h3>
+              <p className="text-yellow-700 dark:text-yellow-300">
+                Could not find driver information. Please try again or select a
+                different driver.
+              </p>
+              <button
+                onClick={handleBack}
+                className="mt-4 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-colors"
+              >
+                Go Back
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -393,34 +548,25 @@ const DriverDetails = ({ driverId }) => {
                 <p className="text-gray-500 dark:text-gray-400 mb-4">
                   ID: {driver.driverId}
                 </p>
-                <div className="w-full space-y-4">
-                  <div className="flex items-center">
-                    <Phone className="w-5 h-5 text-gray-400 mr-3" />
+                <div className="w-full space-y-4 mt-4">
+                  <div className="flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <Phone className="w-5 h-5 text-primary-500 mr-3" />
                     <span className="text-gray-600 dark:text-gray-300">
                       {driver.phoneNumber || "No phone number"}
                     </span>
                   </div>
-                  <div className="flex items-center">
-                    <Car className="w-5 h-5 text-gray-400 mr-3" />
+                  <div className="flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <Car className="w-5 h-5 text-primary-500 mr-3" />
                     <span className="text-gray-600 dark:text-gray-300">
                       {driver.vehicle || "No vehicle assigned"}
                     </span>
                   </div>
-                  <div className="flex items-center">
-                    <Calendar className="w-5 h-5 text-gray-400 mr-3" />
+                  <div className="flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <Calendar className="w-5 h-5 text-primary-500 mr-3" />
                     <span className="text-gray-600 dark:text-gray-300">
                       Joined: {new Date(driver.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                  {/* <div className="flex items-center">
-                    <Clock className="w-5 h-5 text-gray-400 mr-3" />
-                    <span className="text-gray-600 dark:text-gray-300">
-                      Last Login:{" "}
-                      {driver.lastLogin
-                        ? new Date(driver.lastLogin).toLocaleString()
-                        : "Never"}
-                    </span>
-                  </div> */}
                 </div>
               </div>
             </div>
@@ -428,7 +574,7 @@ const DriverDetails = ({ driverId }) => {
 
           {/* Performance Metrics */}
           <div className="lg:col-span-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
@@ -446,7 +592,20 @@ const DriverDetails = ({ driverId }) => {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Overall performance
                 </p>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-4">
+                  <div
+                    className={`h-2 rounded-full ${
+                      driver.score >= 90
+                        ? "bg-green-500"
+                        : driver.score >= 70
+                        ? "bg-amber-500"
+                        : "bg-red-500"
+                    }`}
+                    style={{ width: `${driver.score}%` }}
+                  ></div>
+                </div>
               </div>
+
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
@@ -461,6 +620,7 @@ const DriverDetails = ({ driverId }) => {
                   Completed journeys
                 </p>
               </div>
+
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
@@ -468,7 +628,15 @@ const DriverDetails = ({ driverId }) => {
                   </h3>
                   <AlertTriangle className="w-8 h-8 text-primary-500" />
                 </div>
-                <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                <div
+                  className={`text-4xl font-bold mb-2 ${
+                    driver.incidents === 0
+                      ? "text-green-500"
+                      : driver.incidents < 3
+                      ? "text-amber-500"
+                      : "text-red-500"
+                  }`}
+                >
                   {driver.incidents || 0}
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -476,6 +644,31 @@ const DriverDetails = ({ driverId }) => {
                 </p>
               </div>
             </div>
+
+            {/* Most Common Violations */}
+            {driver.incidents > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mt-6">
+                <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">
+                  Most Common Violation
+                </h3>
+                <div className="flex items-center">
+                  <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg mr-4">
+                    {getIncidentIcon(driver.incidentType)}
+                  </div>
+                  <div>
+                    <p className="text-lg font-medium text-gray-900 dark:text-white">
+                      {incidentTypeMap[driver.incidentType]?.type.replace(
+                        "_",
+                        " "
+                      ) || "Safety Violation"}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Take appropriate action to prevent future occurrences
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -500,13 +693,13 @@ const DriverDetails = ({ driverId }) => {
                     <div
                       className={`p-2 rounded-lg ${
                         activity.severity === "high"
-                          ? "bg-red-200"
+                          ? "bg-red-200 dark:bg-red-800/50"
                           : activity.severity === "medium"
-                          ? "bg-amber-200"
-                          : "bg-green-200"
+                          ? "bg-amber-200 dark:bg-amber-800/50"
+                          : "bg-green-200 dark:bg-green-800/50"
                       } mr-4`}
                     >
-                      <AlertTriangle className="w-5 h-5" />
+                      {getIncidentIcon(activity.incidentNo)}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
@@ -517,7 +710,7 @@ const DriverDetails = ({ driverId }) => {
                         </div>
                       </div>
                       <div className="mt-2 flex items-center">
-                        <div className="text-xs font-medium px-2 py-1 rounded-full bg-white bg-opacity-50 flex items-center">
+                        <div className="text-xs font-medium px-2 py-1 rounded-full bg-white bg-opacity-50 dark:bg-gray-700 dark:bg-opacity-50 flex items-center">
                           <span
                             className={`w-2 h-2 rounded-full ${
                               activity.severity === "high"
@@ -529,14 +722,25 @@ const DriverDetails = ({ driverId }) => {
                           ></span>
                           {activity.severity.toUpperCase()}
                         </div>
+                        {activity.vehicleId && (
+                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                            Vehicle ID: {activity.vehicleId}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-center py-6 text-gray-500 dark:text-gray-400">
-                No incidents recorded
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
+                <p className="text-lg font-medium text-gray-700 dark:text-gray-300">
+                  No incidents recorded
+                </p>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">
+                  This driver has a clean safety record!
+                </p>
               </div>
             )}
           </div>

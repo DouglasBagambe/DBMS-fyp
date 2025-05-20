@@ -380,47 +380,38 @@ export const getDriverDetails = async (driverId) => {
 
 // Normalize incident types to four standard categories
 export const normalizeIncidentType = (type) => {
-  if (!type) return "OTHER";
+  if (!type) return null;
 
-  const upperType = type.toUpperCase();
+  // Convert to lowercase for case-insensitive matching
+  const lowerType = type.toLowerCase().trim();
 
-  // Phone usage detection
-  if (
-    upperType.includes("PHONE") ||
-    upperType.includes("CELL") ||
-    upperType.includes("MOBILE") ||
-    upperType.includes("DISTRACT") ||
-    upperType.includes("TEXT")
-  )
-    return "PHONE_USAGE";
+  // Only accept these exact four types (case-insensitive)
+  switch (lowerType) {
+    case "phone":
+      return "PHONE_USAGE";
+    case "sleepy":
+      return "DROWSINESS";
+    case "cigarette":
+      return "CIGARETTE";
+    case "seatbelt absence":
+      return "SEATBELT";
+    default:
+      return null; // Return null for any other type
+  }
+};
 
-  // Drowsiness detection
-  if (
-    upperType.includes("DROWSI") ||
-    upperType.includes("SLEEP") ||
-    upperType.includes("TIRED") ||
-    upperType.includes("DOZED") ||
-    upperType.includes("FATIGUE")
-  )
-    return "DROWSINESS";
-
-  // Cigarette usage detection
-  if (
-    upperType.includes("CIGAR") ||
-    upperType.includes("SMOK") ||
-    upperType.includes("TOBACCO")
-  )
-    return "CIGARETTE";
-
-  // Seatbelt detection
-  if (
-    upperType.includes("SEAT") ||
-    upperType.includes("BELT") ||
-    upperType.includes("HARNESS") ||
-    upperType.includes("RESTRAINT")
-  )
-    return "SEATBELT";
-
-  // Default to OTHER if no match
-  return "OTHER";
+// Add function to get all incidents
+export const getIncidents = async () => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const response = await cachedGet(`${API_URL}/drivers/all/incidents`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data.incidents;
+  } catch (error) {
+    console.error("Failed to fetch incidents:", error);
+    throw new Error(error.response?.data?.error || "Failed to fetch incidents");
+  }
 };
