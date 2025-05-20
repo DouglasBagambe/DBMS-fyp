@@ -5,9 +5,9 @@ const jwt = require("jsonwebtoken");
 const pool = require("../config/dbConfig");
 const router = express.Router();
 
-// Helper function to normalize incident types to standard categories
+// Helper function to normalize incident types to standard categories and provide incident numbers
 const normalizeIncidentType = (type) => {
-  if (!type) return null;
+  if (!type) return { normalized: null, incident_no: null };
 
   // Convert to lowercase for case-insensitive matching
   const lowerType = type.toLowerCase().trim();
@@ -15,15 +15,15 @@ const normalizeIncidentType = (type) => {
   // Only accept these exact four types (case-insensitive)
   switch (lowerType) {
     case "phone":
-      return "PHONE_USAGE";
-    case "sleepy":
-      return "DROWSINESS";
+      return { normalized: "PHONE_USAGE", incident_no: 1 };
     case "cigarette":
-      return "CIGARETTE";
+      return { normalized: "CIGARETTE", incident_no: 2 };
     case "seatbelt absence":
-      return "SEATBELT";
+      return { normalized: "SEATBELT", incident_no: 3 };
+    case "sleepy":
+      return { normalized: "DROWSINESS", incident_no: 4 };
     default:
-      return null; // Return null for any other type
+      return { normalized: null, incident_no: null }; // Return null for any other type
   }
 };
 
@@ -282,12 +282,15 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
     // Begin transaction
     await pool.query("BEGIN");
 
-    // Record incident
+    // Get incident number based on incident type
+    const { incident_no } = normalizeIncidentType(incidentType);
+
+    // Record incident with incident_no
     await pool.query(
       `INSERT INTO incidents 
-        (driver_id, vehicle_id, incident_type, description, severity, incident_date) 
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
-      [id, vehicleId, incidentType, description || null, severityNum]
+        (driver_id, vehicle_id, incident_type, description, severity, incident_date, incident_no) 
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)`,
+      [id, vehicleId, incidentType, description || null, severityNum, incident_no]
     );
 
     // Update driver safety score only if severity is provided
@@ -295,9 +298,9 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
       const scoreReduction = severityNum * 2; // Example: severity 1 = -2 points, severity 5 = -10 points
       await pool.query(
         `UPDATE drivers 
-         SET safety_score = GREATEST(0, safety_score - $1), 
-             updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $2`,
+       SET safety_score = GREATEST(0, safety_score - $1), 
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $2`,
         [scoreReduction, id]
       );
     }
@@ -403,6 +406,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
         i.severity,
         i.incident_date,
         i.created_at,
+        i.incident_no,
         v.vehicle_number
       FROM incidents i
       LEFT JOIN vehicles v ON i.vehicle_id = v.id
@@ -427,18 +431,21 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
     const driver = result.rows[0];
 
-    // Normalize all incident types in the activity results
-    const incidents_list = activityResult.rows.map((incident) => ({
-      ...incident,
-      // Add a normalized version of the incident type
-      normalized_type: normalizeIncidentType(incident.incident_type),
-    }));
+    // Process incidents and add normalized types
+    const incidents_list = activityResult.rows.map((incident) => {
+      const { normalized, incident_no } = normalizeIncidentType(incident.incident_type);
+      return {
+        ...incident,
+        normalized_type: normalized,
+        // Use stored incident_no if available, otherwise use the normalized one
+        incident_no: incident.incident_no || incident_no
+      };
+    });
 
     // Set the driver's primary incident type if available
     if (incidentTypeResult.rows.length > 0) {
-      driver.incident_type = normalizeIncidentType(
-        incidentTypeResult.rows[0].incident_type
-      );
+      const { normalized } = normalizeIncidentType(incidentTypeResult.rows[0].incident_type);
+      driver.incident_type = normalized;
     }
 
     // Add both raw and normalized incident data

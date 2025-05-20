@@ -1,3 +1,5 @@
+// server/routes/driverAuth.js
+
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const pool = require("../config/dbConfig");
@@ -9,6 +11,28 @@ const {
 const { authenticateToken } = require("../middleware/auth");
 
 const router = express.Router();
+
+// Helper function to get incident number based on incident type
+const getIncidentNumber = (type) => {
+  if (!type) return null;
+
+  // Convert to lowercase for case-insensitive matching
+  const lowerType = type.toLowerCase().trim();
+
+  // Only accept these exact four types (case-insensitive)
+  switch (lowerType) {
+    case "phone":
+      return 1;
+    case "cigarette":
+      return 2;
+    case "seatbelt absence":
+      return 3;
+    case "sleepy":
+      return 4;
+    default:
+      return null; // Return null for any other type
+  }
+};
 
 // Driver login
 router.post("/login", async (req, res) => {
@@ -180,13 +204,16 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
 
     const vehicleId = vehicleResult.rows[0].vehicle_id;
 
+    // Get incident number based on incident type
+    const incidentNo = getIncidentNumber(type);
+
     // Log the incident
     const result = await pool.query(
       `INSERT INTO incidents 
-       (driver_id, vehicle_id, incident_type, description, severity, incident_date) 
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) 
+       (driver_id, vehicle_id, incident_type, description, severity, incident_date, incident_no) 
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6) 
        RETURNING *`,
-      [driverId, vehicleId, type, details || null, severityNum]
+      [driverId, vehicleId, type, details || null, severityNum, incidentNo]
     );
 
     // Update driver safety score only if severity is provided
@@ -239,4 +266,3 @@ router.get("/incidents", authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
- 
