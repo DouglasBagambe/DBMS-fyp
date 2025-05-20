@@ -371,6 +371,51 @@ router.get("/incidents/count", authenticateToken, async (req, res) => {
   }
 });
 
+// Get all incidents for the authenticated user
+router.get("/all/incidents", authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        i.id,
+        i.driver_id,
+        i.vehicle_id,
+        i.incident_type,
+        i.description,
+        i.severity,
+        i.incident_date,
+        i.created_at,
+        i.incident_no,
+        d.name as driver_name,
+        v.vehicle_number
+      FROM incidents i
+      JOIN drivers d ON i.driver_id = d.id
+      JOIN vehicles v ON i.vehicle_id = v.id
+      WHERE d.user_id = $1
+      ORDER BY i.incident_date DESC NULLS LAST, i.created_at DESC
+    `;
+
+    const result = await pool.query(query, [req.userId]);
+
+    // Process incidents to ensure incident_no is present
+    const incidents = result.rows.map((incident) => {
+      if (incident.incident_no === null) {
+        // If incident_no is null, try to determine it from the incident_type
+        const { incident_no } = normalizeIncidentType(incident.incident_type);
+        return {
+          ...incident,
+          incident_no: incident_no,
+        };
+      }
+      return incident;
+    });
+
+    res.json({ incidents });
+  } catch (err) {
+    console.error("Get all incidents error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Get driver details by ID
 router.get("/:id", authenticateToken, async (req, res) => {
   try {
@@ -466,51 +511,6 @@ router.get("/:id", authenticateToken, async (req, res) => {
     res.json({ driver });
   } catch (err) {
     console.error("Get driver details error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// Get all incidents for the authenticated user
-router.get("/all/incidents", authenticateToken, async (req, res) => {
-  try {
-    const query = `
-      SELECT 
-        i.id,
-        i.driver_id,
-        i.vehicle_id,
-        i.incident_type,
-        i.description,
-        i.severity,
-        i.incident_date,
-        i.created_at,
-        i.incident_no,
-        d.name as driver_name,
-        v.vehicle_number
-      FROM incidents i
-      JOIN drivers d ON i.driver_id = d.id
-      JOIN vehicles v ON i.vehicle_id = v.id
-      WHERE d.user_id = $1
-      ORDER BY i.incident_date DESC NULLS LAST, i.created_at DESC
-    `;
-
-    const result = await pool.query(query, [req.userId]);
-
-    // Process incidents to ensure incident_no is present
-    const incidents = result.rows.map((incident) => {
-      if (incident.incident_no === null) {
-        // If incident_no is null, try to determine it from the incident_type
-        const { incident_no } = normalizeIncidentType(incident.incident_type);
-        return {
-          ...incident,
-          incident_no: incident_no,
-        };
-      }
-      return incident;
-    });
-
-    res.json({ incidents });
-  } catch (err) {
-    console.error("Get all incidents error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
