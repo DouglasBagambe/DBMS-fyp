@@ -19,6 +19,9 @@ import {
   Info,
   UserCircle,
   ArrowRight,
+  Wifi,
+  RefreshCw,
+  WifiOff,
 } from "lucide-react";
 import {
   getVehicles,
@@ -29,6 +32,10 @@ import {
   getAllTrips,
   getTripCounts,
 } from "../utils/api";
+import {
+  calculateSafetyScore,
+  getScoreColorScheme,
+} from "../utils/safetyScore";
 import { useRouter } from "next/navigation";
 
 // Import Chart.js modules
@@ -161,9 +168,10 @@ const normalizeIncidentType = (value) => {
 
 const Analytics = () => {
   const router = useRouter();
-  const [dateRange, setDateRange] = useState("7days");
+  const [selectedDateRange, setSelectedDateRange] = useState("7days");
   const [selectedVehicle, setSelectedVehicle] = useState("all");
   const [selectedDriver, setSelectedDriver] = useState("all");
+  const [isNotValid, setInNotValid] = useState(false);
   const [analytics, setAnalytics] = useState({
     vehicles: [],
     drivers: [],
@@ -183,10 +191,11 @@ const Analytics = () => {
     vehicleCount: 0,
     activeDriverCount: 0,
     incidentCount: 0,
+    totalTripsCount: 0,
   });
-  // Add real-time alert states
   const [showAlert, setShowAlert] = useState(false);
   const [alertIncident, setAlertIncident] = useState(null);
+  const [socketStatus, setSocketStatus] = useState("disconnected");
   const socketRef = useRef(null);
 
   // Connect to Socket.io server
@@ -198,94 +207,88 @@ const Analytics = () => {
     const API_URL =
       process.env.NEXT_PUBLIC_API_URL || "https://dbms-o3mb.onrender.com";
 
-    // Dynamically import socket.io-client only on the client side
-    import("socket.io-client")
-      .then(({ io }) => {
+    const setupSocketConnection = async () => {
+      try {
+        setSocketStatus("connecting");
+
+        // Dynamically import socket.io-client only on the client side
+        const { io } = await import("socket.io-client");
+
         const socket = io(API_URL, {
           transports: ["websocket"],
           withCredentials: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          timeout: 10000,
         });
 
         socketRef.current = socket;
 
+        socket.on("connect", () => {
+          console.log("Socket connected for Analytics!");
+          setSocketStatus("connected");
+        });
+
+        socket.on("disconnect", () => {
+          console.log("Socket disconnected!");
+          setSocketStatus("disconnected");
+        });
+
+        socket.on("connect_error", (err) => {
+          console.error("Socket connection error:", err);
+          setSocketStatus("error");
+        });
+
         // Listen for new incidents
         socket.on("newIncident", (incident) => {
-          console.log("Received new incident:", incident);
+          console.log("Received new incident in Analytics:", incident);
 
           // Set the alert data
           setAlertIncident(incident);
           setShowAlert(true);
-        });
-
-        // Listen for trip updates
-        socket.on("tripUpdate", (tripEvent) => {
-          console.log("Received trip update:", tripEvent);
-
-          // Update the incident timeline with the trip event
-          setAnalytics((prevAnalytics) => {
-            // Format the trip event for display
-            const formattedEvent = {
-              id: `trip-${tripEvent.trip_id}`,
-              driverId: tripEvent.driver_id,
-              driverName: tripEvent.driver_name,
-              vehicleNumber: tripEvent.vehicle_number,
-              type: tripEvent.type, // 'trip_started' or 'trip_ended'
-              timestamp: tripEvent.timestamp,
-              formattedTime: new Date(tripEvent.timestamp).toLocaleString(),
-              severity: "low", // trips are not violations
-              message:
-                tripEvent.type === "trip_started"
-                  ? `${tripEvent.driver_name} started a trip with vehicle ${tripEvent.vehicle_number}`
-                  : `${tripEvent.driver_name} completed a trip with vehicle ${
-                      tripEvent.vehicle_number
-                    }${
-                      tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
-                    }${
-                      tripEvent.duration_minutes
-                        ? ` in ${tripEvent.duration_minutes} min`
-                        : ""
-                    }`,
-            };
-
-            // Add to timeline and keep only the 5 most recent
-            const updatedTimeline = [
-              formattedEvent,
-              ...prevAnalytics.incidentTimeline.slice(0, 4),
-            ];
-
-            return {
-              ...prevAnalytics,
-              incidentTimeline: updatedTimeline,
-            };
-          });
 
           // Update the incident timeline with the new incident
           setAnalytics((prevAnalytics) => {
             // Format the incident for display
             const formattedIncident = {
-              id: incident.id,
-              driverId: incident.driverId,
-              driverName: incident.driverName,
-              vehicleNumber: incident.vehicleNumber,
-              incidentNo: incident.incidentNo,
-              type: getIncidentTypeInfo(incident.incidentNo)?.type || "UNKNOWN",
-              timestamp: incident.timestamp,
-              formattedTime: new Date(incident.timestamp).toLocaleString(),
-              severity: getIncidentSeverity(incident.incidentNo),
-              message: `${incident.driverName}: ${getIncidentMessage(
-                incident.incidentNo
+              id: incident.id || `incident-${Date.now()}`,
+              driverId: incident.driverId || incident.driver_id,
+              driverName:
+                incident.driverName || incident.driver_name || "Unknown Driver",
+              vehicleNumber:
+                incident.vehicleNumber ||
+                incident.vehicle_number ||
+                "Unknown Vehicle",
+              incidentNo: incident.incidentNo || incident.incident_no,
+              type:
+                getIncidentTypeInfo(incident.incidentNo || incident.incident_no)
+                  ?.type || "UNKNOWN",
+              timestamp:
+                incident.timestamp ||
+                incident.created_at ||
+                new Date().toISOString(),
+              formattedTime: new Date(
+                incident.timestamp || incident.created_at || new Date()
+              ).toLocaleString(),
+              severity: getIncidentSeverity(
+                incident.incidentNo || incident.incident_no
+              ),
+              message: `${
+                incident.driverName || incident.driver_name
+              }: ${getIncidentMessage(
+                incident.incidentNo || incident.incident_no
               )}`,
             };
 
-            // Add to timeline and keep only the 5 most recent
+            // Add to timeline and keep only the most recent ones
             const updatedTimeline = [
               formattedIncident,
-              ...prevAnalytics.incidentTimeline.slice(0, 4),
+              ...prevAnalytics.incidentTimeline.slice(0, 9),
             ];
 
             // Update incident counts
             const updatedIncidents = { ...prevAnalytics.incidents };
-            switch (Number(incident.incidentNo)) {
+            switch (Number(incident.incidentNo || incident.incident_no)) {
               case 1: // Phone usage
                 updatedIncidents.phoneUsage++;
                 break;
@@ -319,14 +322,62 @@ const Analytics = () => {
           }, 10000);
         });
 
-        // Return cleanup function
-        return () => {
-          socket.disconnect();
-        };
-      })
-      .catch((err) => {
+        // Listen for trip updates
+        socket.on("tripUpdate", (tripEvent) => {
+          console.log("Received trip update in Analytics:", tripEvent);
+
+          // Format the trip event for display
+          const formattedEvent = {
+            id: `trip-${tripEvent.trip_id || Date.now()}`,
+            driverId: tripEvent.driver_id,
+            driverName: tripEvent.driver_name || "Unknown Driver",
+            vehicleNumber: tripEvent.vehicle_number || "Unknown Vehicle",
+            type: tripEvent.type, // 'trip_started' or 'trip_ended'
+            timestamp: tripEvent.timestamp || new Date().toISOString(),
+            formattedTime: new Date(
+              tripEvent.timestamp || new Date()
+            ).toLocaleString(),
+            severity: "low", // trips are not violations
+            message:
+              tripEvent.type === "trip_started"
+                ? `${tripEvent.driver_name} started a trip with vehicle ${tripEvent.vehicle_number}`
+                : `${tripEvent.driver_name} completed a trip with vehicle ${
+                    tripEvent.vehicle_number
+                  }${tripEvent.distance ? ` (${tripEvent.distance} km)` : ""}${
+                    tripEvent.duration_minutes
+                      ? ` in ${tripEvent.duration_minutes} min`
+                      : ""
+                  }`,
+          };
+
+          // Add to timeline and keep only the most recent ones
+          setAnalytics((prevAnalytics) => {
+            const updatedTimeline = [
+              formattedEvent,
+              ...prevAnalytics.incidentTimeline.slice(0, 9),
+            ];
+
+            return {
+              ...prevAnalytics,
+              incidentTimeline: updatedTimeline,
+            };
+          });
+
+          // Update trip metrics when a trip is completed
+          if (tripEvent.type === "trip_ended") {
+            setMetrics((prevMetrics) => ({
+              ...prevMetrics,
+              totalTripsCount: prevMetrics.totalTripsCount + 1,
+            }));
+          }
+        });
+      } catch (err) {
         console.error("Failed to load socket.io client:", err);
-      });
+        setSocketStatus("error");
+      }
+    };
+
+    setupSocketConnection();
 
     // Fetch latest incident on initial load to display any recent alerts
     const fetchLatestIncident = async () => {
@@ -354,6 +405,13 @@ const Analytics = () => {
     };
 
     fetchLatestIncident();
+
+    // Cleanup function
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
   }, []);
 
   // Close alert manually
@@ -606,21 +664,21 @@ const Analytics = () => {
                 vehicleNumber = vehicle.vehicleNumber;
               }
 
-              // Add incident to the list
+              // Format the incident for readable display
+              const formattedTime = new Date(
+                incident.created_at
+              ).toLocaleString();
+
+              // Incident message including driver and message
+              const incidentMessage = `${driverName}: ${getIncidentMessage(
+                incident.incident_no
+              )}`;
+
               allIncidents.push({
-                id:
-                  incident.id ||
-                  `incident-${Math.random().toString(36).substring(2)}`,
-                driverId: incident.driver_id,
-                driverName: driverName,
-                vehicleNumber: vehicleNumber,
-                vehicleId: incident.vehicle_id,
-                incidentNo: incidentNo,
-                type: getIncidentTypeInfo(incidentNo)?.type || "UNKNOWN",
-                timestamp: incident.created_at || new Date().toISOString(),
-                severity: getIncidentSeverity(incidentNo),
-                message: `${driverName}: ${getIncidentMessage(incidentNo)}`,
-                description: incident.description || "",
+                ...incident,
+                formattedTime,
+                message: incidentMessage,
+                severity: getIncidentSeverity(incident.incident_no),
               });
             }
           });
@@ -643,6 +701,19 @@ const Analytics = () => {
         // Output incident counts for debugging
         console.log("Processed incident counts:", incidentCounts);
 
+        // Update the incidentTimeline with the filtered incidents
+        allIncidents.sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        );
+        const incidentTimeline = allIncidents.slice(0, 10); // Just take the 10 most recent
+
+        // Convert to percentages for chart
+        const totalIncidents =
+          incidentCounts.drowsiness +
+          incidentCounts.cigarette +
+          incidentCounts.seatbelt +
+          incidentCounts.phoneUsage;
+
         // Process and filter trips
         let filteredTrips = [];
         if (tripsResponse && tripsResponse.trips) {
@@ -651,91 +722,135 @@ const Analytics = () => {
           // Apply driver filter
           if (selectedDriver !== "all") {
             filteredTrips = filteredTrips.filter(
-              (trip) => String(trip.driver_id) === String(selectedDriver)
+              (trip) =>
+                String(trip.driver_id).trim() === String(selectedDriver).trim()
             );
           }
 
           // Apply vehicle filter
           if (selectedVehicle !== "all") {
-            filteredTrips = filteredTrips.filter(
-              (trip) => trip.vehicle_number === selectedVehicle
+            // Find the vehicle ID corresponding to the selected vehicle number
+            const selectedVehicleObj = vehiclesData.find(
+              (v) => v.vehicle_number === selectedVehicle
             );
+
+            if (selectedVehicleObj) {
+              filteredTrips = filteredTrips.filter(
+                (trip) => trip.vehicle_id === selectedVehicleObj.id
+              );
+            }
           }
 
-          // Apply date range filter
-          if (dateRange !== "all") {
-            const days = getDaysFromRange(dateRange);
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - days);
-
-            filteredTrips = filteredTrips.filter(
-              (trip) => new Date(trip.start_time) >= cutoffDate
-            );
+          // Update trip count in metrics
+          if (selectedDriver !== "all" || selectedVehicle !== "all") {
+            setMetrics((prevMetrics) => ({
+              ...prevMetrics,
+              totalTripsCount: filteredTrips.filter(
+                (trip) => trip.status === "completed"
+              ).length,
+              activeTrips: filteredTrips.filter(
+                (trip) => trip.status === "active"
+              ).length,
+            }));
           }
-
-          // Count active trips
-          const activeTrips = filteredTrips.filter(
-            (trip) => trip.status === "active"
-          ).length;
-
-          // Add trips to activity timeline
-          filteredTrips.slice(0, 5).forEach((trip) => {
-            const tripEvent = {
-              id: `trip-${trip.id}`,
-              driverId: trip.driver_id,
-              driverName: trip.driver_name,
-              vehicleNumber: trip.vehicle_number,
-              type: trip.status === "completed" ? "safe" : "trip_start",
-              timestamp: trip.start_time,
-              formattedTime: new Date(trip.start_time).toLocaleString(),
-              severity: "low",
-              message:
-                trip.status === "completed"
-                  ? `${trip.driver_name} completed trip with vehicle ${
-                      trip.vehicle_number
-                    }${trip.distance ? ` (${trip.distance} km)` : ""}${
-                      trip.duration ? ` in ${trip.duration} min` : ""
-                    }`
-                  : `${trip.driver_name} started trip with vehicle ${trip.vehicle_number}`,
-            };
-
-            allIncidents.push(tripEvent);
-          });
         }
 
-        // Update the metrics now that we've counted incidents and trips
+        // Use safety score calculation utility
+        const safetyScoreData = calculateSafetyScore(
+          filteredIncidents,
+          filteredTrips,
+          {
+            timeWindow: getDaysFromRange(selectedDateRange),
+            timeDecay: true,
+          }
+        );
+
+        console.log("Safety score calculation result:", safetyScoreData);
+
+        // Update chart data with percentages
+        let chartData = [
+          {
+            id: "Drowsiness",
+            value:
+              totalIncidents > 0
+                ? Math.round((incidentCounts.drowsiness / totalIncidents) * 100)
+                : 0,
+            color: "hsl(10, 70%, 50%)",
+            count: incidentCounts.drowsiness,
+            weight: safetyScoreData.incidentBreakdown?.[4]?.penalty || 0,
+          },
+          {
+            id: "Cigarette",
+            value:
+              totalIncidents > 0
+                ? Math.round((incidentCounts.cigarette / totalIncidents) * 100)
+                : 0,
+            color: "hsl(54, 70%, 50%)",
+            count: incidentCounts.cigarette,
+            weight: safetyScoreData.incidentBreakdown?.[2]?.penalty || 0,
+          },
+          {
+            id: "Seatbelt",
+            value:
+              totalIncidents > 0
+                ? Math.round((incidentCounts.seatbelt / totalIncidents) * 100)
+                : 0,
+            color: "hsl(103, 70%, 50%)",
+            count: incidentCounts.seatbelt,
+            weight: safetyScoreData.incidentBreakdown?.[3]?.penalty || 0,
+          },
+          {
+            id: "Phone Usage",
+            value:
+              totalIncidents > 0
+                ? Math.round((incidentCounts.phoneUsage / totalIncidents) * 100)
+                : 0,
+            color: "hsl(176, 70%, 50%)",
+            count: incidentCounts.phoneUsage,
+            weight: safetyScoreData.incidentBreakdown?.[1]?.penalty || 0,
+          },
+        ];
+
+        // Sort chart data by count (high to low)
+        chartData.sort((a, b) => b.count - a.count);
+
+        // Determine most common violation
+        let mostCommonViolation = { type: "None", count: 0 };
+
+        if (chartData[0] && chartData[0].count > 0) {
+          mostCommonViolation = {
+            type: chartData[0].id,
+            count: chartData[0].count,
+          };
+        }
+
+        // Update analytics state with processed data
+        setAnalytics({
+          vehicles: filteredVehicles,
+          drivers: filteredDrivers,
+          incidents: incidentCounts,
+          incidentTimeline,
+          chartData,
+          safetyScore: safetyScoreData.score || 0,
+          safetyRating: safetyScoreData.rating || "Unknown",
+          safetyDetails: safetyScoreData,
+        });
+
+        // Update the most common violation state for use in UI
+        setMostCommonViolation(mostCommonViolation);
+
+        // Update the incident count in metrics
         if (selectedDriver !== "all" || selectedVehicle !== "all") {
-          // Update the custom metrics with actual counts
-          const totalIncidents =
-            incidentCounts.drowsiness +
-            incidentCounts.cigarette +
-            incidentCounts.seatbelt +
-            incidentCounts.phoneUsage;
           setMetrics((prevMetrics) => ({
             ...prevMetrics,
             incidentCount: totalIncidents,
-            totalTrips: filteredTrips.length,
-            activeTrips: filteredTrips.filter(
-              (trip) => trip.status === "active"
-            ).length,
           }));
         }
-
-        // Sort incidents by timestamp (newest first)
-        const sortedIncidents = allIncidents.sort(
-          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-        );
-
-        // Format timestamps for display
-        const formattedIncidents = sortedIncidents.map((incident) => ({
-          ...incident,
-          formattedTime: new Date(incident.timestamp).toLocaleString(),
-        }));
 
         // Group incidents by vehicle
         const incidentsByVehicle = [];
         filteredVehicles.forEach((vehicle) => {
-          const vehicleIncidents = formattedIncidents.filter(
+          const vehicleIncidents = incidentTimeline.filter(
             (i) => i.vehicleNumber === vehicle.vehicleNumber
           );
 
@@ -748,7 +863,7 @@ const Analytics = () => {
         // Group incidents by driver
         const incidentsByDriver = [];
         filteredDrivers.forEach((driver) => {
-          const driverIncidents = formattedIncidents.filter(
+          const driverIncidents = incidentTimeline.filter(
             (i) => String(i.driverId) === String(driver.driverId)
           );
 
@@ -764,7 +879,7 @@ const Analytics = () => {
           vehicles: filteredVehicles,
           drivers: filteredDrivers,
           incidents: incidentCounts,
-          incidentTimeline: formattedIncidents.slice(0, 5), // Top 5 most recent
+          incidentTimeline,
           incidentsByVehicle: incidentsByVehicle,
           incidentsByDriver: incidentsByDriver,
         });
@@ -777,7 +892,7 @@ const Analytics = () => {
     };
 
     fetchData();
-  }, [dateRange, selectedVehicle, selectedDriver]);
+  }, [selectedDateRange, selectedVehicle, selectedDriver]);
 
   // Get CSS classes for incident severity
   const getSeverityStyle = (severity) => {
@@ -975,50 +1090,6 @@ const Analytics = () => {
     },
   };
 
-  // Calculate total incidents
-  const totalIncidents =
-    analytics.incidents.drowsiness +
-    analytics.incidents.cigarette +
-    analytics.incidents.seatbelt +
-    analytics.incidents.phoneUsage;
-
-  // Find most common violation type
-  const getMostCommonViolation = () => {
-    const counts = [
-      {
-        type: getIncidentDisplayName(4),
-        incidentNo: 4,
-        count: analytics.incidents.drowsiness,
-      },
-      {
-        type: getIncidentDisplayName(2),
-        incidentNo: 2,
-        count: analytics.incidents.cigarette,
-      },
-      {
-        type: getIncidentDisplayName(3),
-        incidentNo: 3,
-        count: analytics.incidents.seatbelt,
-      },
-      {
-        type: getIncidentDisplayName(1),
-        incidentNo: 1,
-        count: analytics.incidents.phoneUsage,
-      },
-    ];
-
-    return counts.reduce(
-      (max, current) => (current.count > max.count ? current : max),
-      { type: "None", incidentNo: 0, count: 0 }
-    );
-  };
-
-  const mostCommonViolation = getMostCommonViolation();
-  const mostCommonPercentage =
-    totalIncidents > 0
-      ? Math.round((mostCommonViolation.count / totalIncidents) * 100)
-      : 0;
-
   // Find vehicles with highest and lowest incidents
   const vehicleWithMostIncidents =
     analytics.incidentsByVehicle.length > 0
@@ -1112,14 +1183,55 @@ const Analytics = () => {
               Monitor driver behavior and safety violations
             </p>
           </div>
+
+          {/* Socket Status Indicator */}
+          <div className="flex items-center">
+            <div
+              className={`flex items-center ${
+                socketStatus === "connected"
+                  ? "text-green-500"
+                  : socketStatus === "connecting"
+                  ? "text-amber-500 animate-pulse"
+                  : "text-red-500"
+              }`}
+            >
+              {socketStatus === "connected" ? (
+                <Wifi className="w-4 h-4 mr-1" />
+              ) : socketStatus === "connecting" ? (
+                <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <WifiOff className="w-4 h-4 mr-1" />
+              )}
+              <span className="text-sm">
+                {socketStatus === "connected"
+                  ? "Live Updates Active"
+                  : socketStatus === "connecting"
+                  ? "Connecting..."
+                  : "Live Updates Disconnected"}
+              </span>
+            </div>
+            {(socketStatus === "disconnected" || socketStatus === "error") && (
+              <button
+                onClick={() => {
+                  if (socketRef.current) {
+                    socketRef.current.connect();
+                    setSocketStatus("connecting");
+                  }
+                }}
+                className="ml-2 px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
+              >
+                Reconnect
+              </button>
+            )}
+          </div>
           <div className="flex flex-col sm:flex-row gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Date Range
               </label>
               <select
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
+                value={selectedDateRange}
+                onChange={(e) => setSelectedDateRange(e.target.value)}
                 className="block w-40 pl-3 pr-8 py-2 text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-primary-500 focus:border-primary-500 rounded-md"
               >
                 <option value="7days">Last 7 days</option>
@@ -1211,7 +1323,7 @@ const Analytics = () => {
                 </h3>
                 <div className="flex justify-center items-center">
                   <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">
-                    {metrics.totalTrips || 0}
+                    {metrics.totalTripsCount || 0}
                   </p>
                   {metrics.activeTrips > 0 && (
                     <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-600">
@@ -1249,6 +1361,45 @@ const Analytics = () => {
                     ? "Current driver"
                     : "Vehicle unassigned"}
                 </p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                  Safety Score
+                </h3>
+                <div
+                  className={`text-3xl font-bold mb-1 ${
+                    analytics.safetyScore >= 90
+                      ? "text-green-600 dark:text-green-400"
+                      : analytics.safetyScore >= 80
+                      ? "text-green-600 dark:text-green-400"
+                      : analytics.safetyScore >= 70
+                      ? "text-yellow-600 dark:text-yellow-400"
+                      : analytics.safetyScore >= 60
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {analytics.safetyScore}%
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {analytics.safetyRating || "Rating: Excellent"}
+                </p>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                  <div
+                    className={`h-2 rounded-full ${
+                      analytics.safetyScore >= 90
+                        ? "bg-green-500"
+                        : analytics.safetyScore >= 80
+                        ? "bg-green-500"
+                        : analytics.safetyScore >= 70
+                        ? "bg-yellow-500"
+                        : analytics.safetyScore >= 60
+                        ? "bg-amber-500"
+                        : "bg-red-500"
+                    }`}
+                    style={{ width: `${analytics.safetyScore}%` }}
+                  ></div>
+                </div>
               </div>
             </div>
 

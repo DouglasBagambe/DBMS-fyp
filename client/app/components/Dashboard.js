@@ -2,7 +2,7 @@
 // src/components/Dashboard.js
 
 "use client";
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useRef } from "react";
 import { Link } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 import {
@@ -21,6 +21,9 @@ import {
   Info,
   Calendar,
   Shield,
+  Wifi,
+  WifiOff,
+  RefreshCw,
 } from "lucide-react";
 import {
   getDashboardMetrics,
@@ -33,6 +36,10 @@ import {
 import { useRouter } from "next/navigation";
 import { useNotifications } from "../context/NotificationsContext";
 import Notifications from "./Notifications";
+import {
+  calculateSafetyScore,
+  getScoreColorScheme,
+} from "../utils/safetyScore";
 
 const Dashboard = () => {
   const { user } = useContext(AuthContext);
@@ -56,6 +63,8 @@ const Dashboard = () => {
     description: "",
     incidentNo: 3, // Default to seatbelt
   });
+  const [socketStatus, setSocketStatus] = useState("disconnected");
+  const socketRef = useRef(null);
 
   // Use the notifications context
   const { getIncidentInfo } = useNotifications();
@@ -73,6 +82,144 @@ const Dashboard = () => {
   });
 
   const router = useRouter();
+
+  // Set up socket connection for real-time activity updates
+  useEffect(() => {
+    // Only run on client side
+    if (typeof window === "undefined") return;
+
+    const setupSocketConnection = async () => {
+      try {
+        setSocketStatus("connecting");
+        const API_URL =
+          process.env.NEXT_PUBLIC_API_URL || "https://dbms-o3mb.onrender.com";
+
+        // Dynamically import socket.io-client
+        const { io } = await import("socket.io-client");
+
+        const socket = io(API_URL, {
+          transports: ["websocket"],
+          withCredentials: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          timeout: 10000,
+        });
+
+        socketRef.current = socket;
+
+        // Setup socket event listeners
+        socket.on("connect", () => {
+          console.log("Socket connected for Dashboard!");
+          setSocketStatus("connected");
+        });
+
+        socket.on("disconnect", () => {
+          console.log("Socket disconnected!");
+          setSocketStatus("disconnected");
+        });
+
+        socket.on("connect_error", (err) => {
+          console.error("Socket connection error:", err);
+          setSocketStatus("error");
+        });
+
+        // Listen for new incidents in real-time
+        socket.on("newIncident", (incident) => {
+          console.log("Received new incident in Dashboard:", incident);
+          
+          // Format the incident for display
+          const incidentInfo = getIncidentInfo(incident.incidentNo || incident.incident_no);
+          if (!incidentInfo) return;
+
+          const formattedIncident = {
+            id: incident.id || Date.now(),
+            driverId: incident.driverId || incident.driver_id,
+            driverName: incident.driverName || incident.driver_name,
+            vehicleId: incident.vehicleId || incident.vehicle_id,
+            vehicleNumber: incident.vehicleNumber || incident.vehicle_number,
+            incidentNo: incident.incidentNo || incident.incident_no,
+            timestamp: incident.timestamp || new Date().toISOString(),
+            type: incidentInfo.type.toLowerCase(),
+            severity: incidentInfo.severity,
+            message: `Driver ${incident.driverName || incident.driver_name}: ${incidentInfo.message}`,
+          };
+          
+          // Update alerts state (add to beginning)
+          setDashboardData(prev => ({
+            ...prev,
+            alerts: [formattedIncident, ...prev.alerts.slice(0, 2)]
+          }));
+          
+          // Update activity data state 
+          setActivityData(prev => [{
+            id: `incident-${formattedIncident.id}`,
+            type: formattedIncident.severity === "high" ? "danger" : "warning",
+            message: formattedIncident.message,
+            timestamp: new Date(formattedIncident.timestamp).toLocaleTimeString(),
+            incident_no: formattedIncident.incidentNo,
+          }, ...prev.slice(0, 19)]);
+          
+          // Update metrics
+          setMetrics(prev => ({
+            ...prev,
+            recentIncidents: prev.recentIncidents + 1
+          }));
+        });
+
+        // Listen for trip updates in real-time
+        socket.on("tripUpdate", (tripEvent) => {
+          console.log("Received trip update in Dashboard:", tripEvent);
+          
+          // Format the trip activity 
+          const activityType = tripEvent.type === "trip_started" ? "trip_start" : "safe";
+          const message = tripEvent.type === "trip_started"
+            ? `Driver ${tripEvent.driver_name} started trip with vehicle ${tripEvent.vehicle_number}`
+            : `Driver ${tripEvent.driver_name} completed trip with vehicle ${tripEvent.vehicle_number}${
+                tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
+              }`;
+              
+          // Update activity data
+          setActivityData(prev => [{
+            id: `trip-${tripEvent.trip_id || Date.now()}`,
+            type: activityType,
+            message,
+            timestamp: new Date(tripEvent.timestamp || new Date()).toLocaleTimeString(),
+            driver_id: tripEvent.driver_id,
+            vehicle_id: tripEvent.vehicle_id,
+          }, ...prev.slice(0, 19)]);
+          
+          // Update metrics if a trip is completed
+          if (tripEvent.type === "trip_ended") {
+            setDashboardData(prev => ({
+              ...prev,
+              totalTrips: prev.totalTrips + 1,
+            }));
+          } else if (tripEvent.type === "trip_started") {
+            // If trip started, increment active trips count
+            setDashboardData(prev => ({
+              ...prev,
+              activeTrips: prev.activeTrips + 1,
+            }));
+          }
+        });
+
+        return () => {
+          socket.disconnect();
+        };
+      } catch (err) {
+        console.error("Failed to initialize socket:", err);
+        setSocketStatus("error");
+      }
+    };
+
+    setupSocketConnection();
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
 
   // Fetch dashboard metrics, alerts, and activity
   useEffect(() => {
@@ -132,29 +279,14 @@ const Dashboard = () => {
             })
           : [];
 
-        // Calculate average driver score
-        const averageScore =
-          drivers.drivers.length > 0
-            ? Math.round(
-                drivers.drivers.reduce(
-                  (sum, driver) => sum + (driver.safety_score || 0),
-                  0
-                ) / drivers.drivers.length
-              )
-            : 0;
+        // Use the safety score calculation utility
+        const safetyScoreData = calculateSafetyScore(filteredIncidents, filteredTrips, {
+          timeWindow: 30, // Consider incidents from the last 30 days
+        });
 
-        // Calculate safe driving percentage (trips without incidents)
-        let safeDrivingPercentage = 0;
-        if (totalTrips > 0) {
-          // Calculate incidents per trip (as a percentage)
-          const incidentsPerTrip =
-            (filteredIncidents.length / totalTrips) * 100;
-          // Invert to get safety percentage (cap at 100%)
-          safeDrivingPercentage = Math.min(
-            Math.max(0, Math.round(100 - incidentsPerTrip)),
-            100
-          );
-        }
+        // Get the calculated safety score
+        const averageScore = safetyScoreData.score;
+        const safeDrivingPercentage = averageScore; // Use the calculated score directly
 
         // Update metrics state
         setMetrics({
@@ -445,6 +577,45 @@ const Dashboard = () => {
               <Clock className="w-4 h-4 mr-1" />
               <span>{getCurrentDate()}</span>
             </div>
+          </div>
+          
+          {/* Socket Status */}
+          <div className="flex justify-end items-center text-sm mb-4">
+            <div className={`flex items-center ${
+              socketStatus === "connected" 
+                ? "text-green-500" 
+                : socketStatus === "connecting" 
+                  ? "text-amber-500 animate-pulse" 
+                  : "text-red-500"
+            }`}>
+              {socketStatus === "connected" ? (
+                <Wifi className="w-4 h-4 mr-1" />
+              ) : socketStatus === "connecting" ? (
+                <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <WifiOff className="w-4 h-4 mr-1" />
+              )}
+              <span>
+                {socketStatus === "connected"
+                  ? "Live Updates Active"
+                  : socketStatus === "connecting"
+                  ? "Connecting..."
+                  : "Live Updates Disconnected"}
+              </span>
+            </div>
+            {(socketStatus === "disconnected" || socketStatus === "error") && (
+              <button
+                onClick={() => {
+                  if (socketRef.current) {
+                    socketRef.current.connect();
+                    setSocketStatus("connecting");
+                  }
+                }}
+                className="ml-2 px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
+              >
+                Reconnect
+              </button>
+            )}
           </div>
         </div>
 
