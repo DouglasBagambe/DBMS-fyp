@@ -325,16 +325,16 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
     // Create incident object for real-time notification
     const incidentAlert = {
       id: incidentResult.rows[0].id,
-      driverId: id,
-      driverName: driverName,
-      vehicleNumber: vehicleNumber,
-      incidentType: incidentType,
-      incidentNo: incident_no,
-      timestamp:
-        incidentResult.rows[0].created_at ||
-        incidentResult.rows[0].incident_date,
+      driver_id: id,
+      driver_name: driverName,
+      vehicle_id: vehicleId,
+      vehicle_number: vehicleNumber,
+      incident_type: incidentType,
+      incident_no: incident_no,
+      timestamp: incidentResult.rows[0].created_at || incidentResult.rows[0].incident_date,
       severity: severityNum || 1,
       description: description || "",
+      type: "safety_incident" // Add explicit type like trips have
     };
 
     // Emit the incident alert to all connected clients
