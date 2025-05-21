@@ -10,34 +10,7 @@ import React, {
   useContext,
 } from "react";
 import { getLatestIncident } from "../utils/api";
-
-// Constants for incident types
-export const INCIDENT_TYPES = {
-  1: {
-    type: "PHONE_USAGE",
-    message: "Phone usage detected",
-    severity: "high",
-    displayName: "Phone Usage",
-  },
-  2: {
-    type: "CIGARETTE",
-    message: "Cigarette usage detected",
-    severity: "medium",
-    displayName: "Cigarette Usage",
-  },
-  3: {
-    type: "SEATBELT",
-    message: "Seatbelt violation detected",
-    severity: "medium",
-    displayName: "Seatbelt Violation",
-  },
-  4: {
-    type: "DROWSINESS",
-    message: "Driver drowsiness detected",
-    severity: "high",
-    displayName: "Drowsiness",
-  },
-};
+import { INCIDENT_TYPES, getIncidentInfo } from "../utils/incidentUtils";
 
 // Create the notifications context
 export const NotificationsContext = createContext();
@@ -68,6 +41,110 @@ export const NotificationsProvider = ({ children }) => {
   const mediumAlertAudioRef = useRef(null);
   const lowAlertAudioRef = useRef(null);
   const tripAudioRef = useRef(null); // New audio for trip notifications
+
+  // Fetch latest incident to display on load
+  const fetchLatestIncident = async () => {
+    try {
+      const latestIncident = await getLatestIncident();
+      if (latestIncident && latestIncident.id) {
+        // Process this incident as if it just arrived
+        processNewIncident(latestIncident);
+      }
+    } catch (error) {
+      console.error("Error fetching latest incident:", error);
+    }
+  };
+
+  // Group notifications by type or severity
+  const getGroupedNotifications = () => {
+    if (!notificationSettings.groupBySeverity || !notificationHistory.length) {
+      return notificationHistory;
+    }
+
+    // Group by severity
+    const groups = {
+      high: [],
+      medium: [],
+      low: [],
+      trip: [],
+    };
+
+    // Sort notifications into groups
+    notificationHistory.forEach((notification) => {
+      if (notification.alertType === "trip") {
+        groups.trip.push(notification);
+      } else if (notification.severity === "high") {
+        groups.high.push(notification);
+      } else if (notification.severity === "medium") {
+        groups.medium.push(notification);
+      } else {
+        groups.low.push(notification);
+      }
+    });
+
+    // Flatten groups in priority order
+    return [...groups.high, ...groups.medium, ...groups.low, ...groups.trip];
+  };
+
+  // Mark all notifications as read
+  const markAllAsRead = () => {
+    setNotificationHistory((prev) =>
+      prev.map((notification) => ({ ...notification, read: true }))
+    );
+    setUnreadCount(0);
+  };
+
+  // Mark a specific notification as read
+  const markAsRead = (notificationId) => {
+    setNotificationHistory((prev) =>
+      prev.map((notification) =>
+        notification.id === notificationId
+          ? { ...notification, read: true }
+          : notification
+      )
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+  };
+
+  // Clear all notifications
+  const clearAllNotifications = () => {
+    setNotificationHistory([]);
+    setUnreadCount(0);
+  };
+
+  // Request notification permission
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) {
+      return false;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationsEnabled(permission === "granted");
+    return permission === "granted";
+  };
+
+  // Update notification settings
+  const updateNotificationSettings = (newSettings) => {
+    setNotificationSettings((prev) => ({
+      ...prev,
+      ...newSettings,
+    }));
+  };
+
+  // Trigger a test notification
+  const triggerTestNotification = () => {
+    const testIncident = {
+      id: `test-${Date.now()}`,
+      driverId: 1,
+      driverName: "Test Driver",
+      vehicleId: 1,
+      vehicleNumber: "TEST-001",
+      incidentNo: Math.floor(Math.random() * 4) + 1,
+      timestamp: new Date().toISOString(),
+    };
+
+    processNewIncident(testIncident);
+  };
 
   // Set up socket connection for real-time notifications
   const setupSocketConnection = async () => {
