@@ -34,12 +34,19 @@ import {
   getAllTrips,
 } from "../utils/api";
 import { useRouter } from "next/navigation";
-import { useNotifications } from "../context/NotificationsContext";
+import {
+  useNotifications,
+  INCIDENT_TYPES,
+} from "../context/NotificationsContext";
 import Notifications from "./Notifications";
 import {
   calculateSafetyScore,
   getScoreColorScheme,
 } from "../utils/safetyScore";
+
+const getIncidentInfo = (incidentNo) => {
+  return INCIDENT_TYPES[incidentNo] || null;
+};
 
 const Dashboard = () => {
   const { user } = useContext(AuthContext);
