@@ -195,6 +195,8 @@ const Dashboard = () => {
               message: `Driver ${incident.driver_name}: ${incidentInfo.message}`,
               timestamp: new Date(incident.created_at).toLocaleTimeString(),
               severity: incidentInfo.severity,
+              driverName: incident.driver_name,
+              vehicleNumber: incident.vehicle_number,
               driverId: incident.driver_id,
               vehicleId: incident.vehicle_id,
               type: incidentInfo.type.toLowerCase(),
@@ -633,7 +635,7 @@ const Dashboard = () => {
                                       alert.severity.slice(1)}
                                   </div>
                                   <div className="text-xs ml-2">
-                                    Vehicle: {alert.vehicleId}
+                                    Vehicle: {alert.vehicleNumber}
                                   </div>
                                 </div>
                               </div>
@@ -641,7 +643,7 @@ const Dashboard = () => {
                             <div className="flex justify-end mt-3 space-x-2">
                               <button
                                 onClick={() =>
-                                  handleViewDriverDetails(alert.driverId)
+                                  handleViewDriverDetails(alert.driverName)
                                 }
                                 className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors duration-200 ease-in-out shadow-sm hover:shadow-md"
                               >

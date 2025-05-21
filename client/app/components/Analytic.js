@@ -533,7 +533,7 @@ const Analytics = () => {
               }
 
               // Find driver name based on driver_id from filtered drivers
-              let driverName = `Driver ${incident.driver_id}`;
+              let driverName = `Driver ${incident.driver_name}`;
               const driver = filteredDrivers.find(
                 (d) => String(d.driverId) === String(incident.driver_id)
               );
@@ -1312,7 +1312,7 @@ const Analytics = () => {
                             </div>
                           </div>
                           <div className="flex justify-end mt-3 space-x-2">
-                            {incident.driverName && (
+                            {incident.driverId && (
                               <button
                                 onClick={() =>
                                   handleViewDriverDetails(incident.driverId)
