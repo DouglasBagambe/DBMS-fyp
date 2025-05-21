@@ -64,6 +64,38 @@ const AllIncidents = () => {
     return incidentTypeMap[incidentNo] || null;
   };
 
+  // Add sound playback for notifications
+  const playNotificationSound = (type) => {
+    try {
+      // Try with different paths
+      const soundFile = type === "incident" ? 
+        "/sounds/alert.mp3" : 
+        "/sounds/notification.mp3";
+      
+      const audio = new Audio(soundFile);
+      audio.volume = type === "incident" ? 0.7 : 0.5;
+      
+      // Add error handling
+      audio.addEventListener('error', (e) => {
+        console.warn(`Error loading sound ${soundFile}, trying fallback`, e);
+        // Try fallback paths
+        const fallbackFile = type === "incident" ? 
+          "/alert.mp3" : 
+          "/notification.mp3";
+        const fallbackAudio = new Audio(fallbackFile);
+        fallbackAudio.play().catch(err => {
+          console.log("Fallback audio error:", err);
+        });
+      });
+      
+      audio.play().catch(err => {
+        console.log("Audio play error:", err);
+      });
+    } catch (err) {
+      console.log("Audio setup error:", err);
+    }
+  };
+
   // Set up socket connection for real-time notifications
   useEffect(() => {
     // Only run on client side
@@ -111,21 +143,20 @@ const AllIncidents = () => {
           // Format the incident
           const formattedIncident = {
             id: incident.id || `incident-${Date.now()}`,
-            driver_id: incident.driverId || incident.driver_id,
-            driver_name:
-              incident.driverName || incident.driver_name || "Unknown Driver",
-            vehicle_id: incident.vehicleId || incident.vehicle_id,
-            vehicle_number:
-              incident.vehicleNumber ||
-              incident.vehicle_number ||
-              "Unknown Vehicle",
-            incident_no: incident.incidentNo || incident.incident_no,
-            created_at:
-              incident.timestamp ||
-              incident.created_at ||
-              new Date().toISOString(),
+            driver_id: incident.driver_id,
+            driver_name: incident.driver_name || "Unknown Driver",
+            vehicle_id: incident.vehicle_id,
+            vehicle_number: incident.vehicle_number || "Unknown Vehicle",
+            incident_no: incident.incident_no,
+            incident_type: incident.incident_type,
+            created_at: incident.timestamp || new Date().toISOString(),
             type: "incident",
             is_realtime: true,
+            message:
+              incident.message ||
+              `Safety incident detected by ${
+                incident.driver_name || "Unknown Driver"
+              }`,
           };
 
           // Add to incidents list
@@ -136,9 +167,13 @@ const AllIncidents = () => {
             {
               ...formattedIncident,
               activity_type: "incident",
+              timestamp: formattedIncident.created_at,
             },
             ...prev,
           ]);
+          
+          // Play notification sound
+          playNotificationSound("incident");
         });
 
         // Listen for trip updates
@@ -173,6 +208,9 @@ const AllIncidents = () => {
             },
             ...prev,
           ]);
+          
+          // Play notification sound for trips
+          playNotificationSound("trip");
         });
 
         return () => {
@@ -373,7 +411,15 @@ const AllIncidents = () => {
   // Format date string
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleString();
+    try {
+      const date = new Date(dateString);
+      // Check if date is valid
+      if (isNaN(date.getTime())) return "Invalid Date";
+      return date.toLocaleString();
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Error";
+    }
   };
 
   // Function to navigate back
