@@ -192,7 +192,7 @@ const Dashboard = () => {
 
             return {
               id: index + 1,
-              message: `Driver ${incident.driver_id}: ${incidentInfo.message}`,
+              message: `Driver ${incident.driver_name}: ${incidentInfo.message}`,
               timestamp: new Date(incident.created_at).toLocaleTimeString(),
               severity: incidentInfo.severity,
               driverId: incident.driver_id,
@@ -253,7 +253,7 @@ const Dashboard = () => {
               return {
                 id: `incident-${index}`,
                 type: activityType,
-                message: `Driver ${incident.driver_id}: ${incidentInfo.message}`,
+                message: `Driver ${incident.driver_name}: ${incidentInfo.message}`,
                 timestamp: new Date(incident.created_at).toLocaleTimeString(),
                 incident_no: incident.incident_no,
               };

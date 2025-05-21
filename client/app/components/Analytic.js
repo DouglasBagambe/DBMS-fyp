@@ -1312,7 +1312,7 @@ const Analytics = () => {
                             </div>
                           </div>
                           <div className="flex justify-end mt-3 space-x-2">
-                            {incident.driverId && (
+                            {incident.driverName && (
                               <button
                                 onClick={() =>
                                   handleViewDriverDetails(incident.driverId)
