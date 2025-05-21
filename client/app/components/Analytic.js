@@ -757,18 +757,16 @@ const Analytics = () => {
             }
           }
 
-          // Update trip count in metrics
-          if (selectedDriver !== "all" || selectedVehicle !== "all") {
-            setMetrics((prevMetrics) => ({
-              ...prevMetrics,
-              totalTripsCount: filteredTrips.filter(
-                (trip) => trip.status === "completed"
-              ).length,
-              activeTrips: filteredTrips.filter(
-                (trip) => trip.status === "active"
-              ).length,
-            }));
-          }
+          // Update trip count in metrics regardless of filters
+          setMetrics((prevMetrics) => ({
+            ...prevMetrics,
+            totalTripsCount: filteredTrips.filter(
+              (trip) => trip.status === "completed"
+            ).length,
+            activeTrips: filteredTrips.filter(
+              (trip) => trip.status === "active"
+            ).length,
+          }));
         }
 
         // Use safety score calculation utility
@@ -1307,23 +1305,6 @@ const Analytics = () => {
                 ))}
               </select>
             </div>
-            {/* <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Driver
-              </label>
-              <select
-                value={selectedDriver}
-                onChange={(e) => setSelectedDriver(e.target.value)}
-                className="block w-40 pl-3 pr-8 py-2 text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-primary-500 focus:border-primary-500 rounded-md"
-              >
-                <option value="all">All Drivers</option>
-                {analytics.drivers.map((driver) => (
-                  <option key={driver.id} value={driver.driverId}>
-                    {driver.name}
-                  </option>
-                ))}
-              </select>
-            </div> */}
           </div>
         </div>
 
@@ -1346,10 +1327,10 @@ const Analytics = () => {
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-8">
               <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
-                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Most Common Violation
                 </h3>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mb-0">
+                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mb-1">
                   {mostCommonViolation.type}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -1357,10 +1338,10 @@ const Analytics = () => {
                 </p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
-                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Total Violations
                 </h3>
-                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mb-0">
+                <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mb-1">
                   {totalIncidents}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -1368,88 +1349,37 @@ const Analytics = () => {
                 </p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
-                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Trips
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                  Trips Completed
                 </h3>
-                <div className="flex justify-center items-center">
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-0">
-                    {metrics.totalTripsCount || 0}
-                  </p>
-                  {metrics.activeTrips > 0 && (
-                    <span className="ml-1 px-1 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-600">
-                      {metrics.activeTrips}
-                    </span>
-                  )}
-                </div>
+                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">
+                  {metrics.totalTripsCount || 0}
+                </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Total trips in period
+                  In selected period
                 </p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
-                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  {selectedVehicle === "all"
-                    ? "Safest Vehicle"
-                    : "Vehicle Driver"}
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                  Total Vehicles
                 </h3>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mb-0">
-                  {selectedVehicle === "all"
-                    ? vehicleWithLeastIncidents.vehicleNumber
-                    : analytics.vehicles.length > 0 &&
-                      analytics.vehicles[0].driverName !== "Unassigned"
-                    ? analytics.vehicles[0].driverName
-                    : "No driver assigned"}
+                <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
+                  {metrics.vehicleCount}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {selectedVehicle === "all"
-                    ? `${
-                        vehicleWithLeastIncidents.incidents === Infinity
-                          ? 0
-                          : vehicleWithLeastIncidents.incidents
-                      } violations`
-                    : analytics.vehicles.length > 0 &&
-                      analytics.vehicles[0].driverName !== "Unassigned"
-                    ? "Current driver"
-                    : "Vehicle unassigned"}
+                  In the system
                 </p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
-                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Safety Score
                 </h3>
-                <div
-                  className={`text-2xl font-bold mb-0 ${
-                    analytics.safetyScore >= 90
-                      ? "text-green-600 dark:text-green-400"
-                      : analytics.safetyScore >= 80
-                      ? "text-green-600 dark:text-green-400"
-                      : analytics.safetyScore >= 70
-                      ? "text-yellow-600 dark:text-yellow-400"
-                      : analytics.safetyScore >= 60
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-red-600 dark:text-red-400"
-                  }`}
-                >
-                  {analytics.safetyScore}%
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {analytics.safetyRating || "Rating: Excellent"}
+                <p className="text-3xl font-bold text-primary-600 dark:text-primary-400 mb-1">
+                  {analytics.safetyScore}
                 </p>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mt-1">
-                  <div
-                    className={`h-1 rounded-full ${
-                      analytics.safetyScore >= 90
-                        ? "bg-green-500"
-                        : analytics.safetyScore >= 80
-                        ? "bg-green-500"
-                        : analytics.safetyScore >= 70
-                        ? "bg-yellow-500"
-                        : analytics.safetyScore >= 60
-                        ? "bg-amber-500"
-                        : "bg-red-500"
-                    }`}
-                    style={{ width: `${analytics.safetyScore}%` }}
-                  ></div>
-                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {analytics.safetyRating} rating
+                </p>
               </div>
             </div>
 
@@ -1457,7 +1387,8 @@ const Analytics = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               {/* Bar Chart */}
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
-                {analytics.incidentsByVehicle.length > 0 ? (
+                {analytics.incidentsByVehicle &&
+                analytics.incidentsByVehicle.length > 0 ? (
                   <Bar data={barChartData} options={barChartOptions} />
                 ) : (
                   <div className="h-full flex items-center justify-center">

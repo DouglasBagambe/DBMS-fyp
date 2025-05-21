@@ -29,6 +29,7 @@ import {
   updateDriver,
   deleteDriver,
   getIncidents,
+  getDriverTrips,
 } from "../utils/api";
 
 const DriverDetails = ({ driverId: propDriverId }) => {
@@ -197,10 +198,11 @@ const DriverDetails = ({ driverId: propDriverId }) => {
 
       try {
         console.log(`Fetching data for driver: ${driverId}`);
-        // Get both driver data and incidents
-        const [driverData, incidentsData] = await Promise.all([
+        // Get driver data, incidents, and trip data in parallel
+        const [driverData, incidentsData, tripData] = await Promise.all([
           getDrivers(),
           getIncidents(),
+          getDriverTrips(driverId),
         ]);
 
         if (driverData && driverData.drivers && driverData.drivers.length > 0) {
@@ -313,6 +315,14 @@ const DriverDetails = ({ driverId: propDriverId }) => {
               }
             });
 
+            // Process trip data if available
+            console.log("Trip data:", tripData);
+            const completedTrips =
+              tripData && tripData.trips
+                ? tripData.trips.filter((trip) => trip.status === "completed")
+                    .length
+                : 0;
+
             // Create complete driver object with all required properties
             const driverObj = {
               id: foundDriver.id,
@@ -321,7 +331,7 @@ const DriverDetails = ({ driverId: propDriverId }) => {
               phoneNumber: foundDriver.phone || foundDriver.phone_number || "",
               vehicle: foundDriver.vehicle || "None",
               vehicleId: foundDriver.vehicle_id || null,
-              totalTrips: foundDriver.total_trips || 0,
+              totalTrips: completedTrips || foundDriver.total_trips || 0,
               incidents: totalIncidents || foundDriver.incidents || 0,
               incidentType: mostCommonIncidentType || 3,
               recentActivity: activities,
