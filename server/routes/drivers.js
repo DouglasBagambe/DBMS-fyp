@@ -261,7 +261,7 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
   try {
     // Check if driver exists and belongs to user
     const driverCheck = await pool.query(
-      "SELECT id FROM drivers WHERE id = $1 AND user_id = $2",
+      "SELECT id, name FROM drivers WHERE id = $1 AND user_id = $2",
       [id, req.userId]
     );
 
@@ -269,15 +269,19 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Driver not found" });
     }
 
+    const driverName = driverCheck.rows[0].name;
+
     // Check if vehicle exists and belongs to user
     const vehicleCheck = await pool.query(
-      "SELECT id FROM vehicles WHERE id = $1 AND user_id = $2",
+      "SELECT id, vehicle_number FROM vehicles WHERE id = $1 AND user_id = $2",
       [vehicleId, req.userId]
     );
 
     if (vehicleCheck.rows.length === 0) {
       return res.status(404).json({ error: "Vehicle not found" });
     }
+
+    const vehicleNumber = vehicleCheck.rows[0].vehicle_number;
 
     // Begin transaction
     await pool.query("BEGIN");
@@ -286,10 +290,11 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
     const { incident_no } = normalizeIncidentType(incidentType);
 
     // Record incident with incident_no
-    await pool.query(
+    const incidentResult = await pool.query(
       `INSERT INTO incidents 
         (driver_id, vehicle_id, incident_type, description, severity, incident_date, incident_no) 
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)`,
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
+       RETURNING id, created_at, incident_date`,
       [
         id,
         vehicleId,
@@ -314,9 +319,32 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
 
     await pool.query("COMMIT");
 
+    // Get the Socket.io instance
+    const io = req.app.get("io");
+
+    // Create incident object for real-time notification
+    const incidentAlert = {
+      id: incidentResult.rows[0].id,
+      driverId: id,
+      driverName: driverName,
+      vehicleNumber: vehicleNumber,
+      incidentType: incidentType,
+      incidentNo: incident_no,
+      timestamp:
+        incidentResult.rows[0].created_at ||
+        incidentResult.rows[0].incident_date,
+      severity: severityNum || 1,
+      description: description || "",
+    };
+
+    // Emit the incident alert to all connected clients
+    io.emit("newIncident", incidentAlert);
+    console.log("Emitted new incident alert:", incidentAlert);
+
     res.status(201).json({
       message: "Incident recorded successfully",
       scoreReduction: severityNum ? severityNum * 2 : 0,
+      incident: incidentAlert,
     });
   } catch (err) {
     await pool.query("ROLLBACK");
@@ -511,6 +539,63 @@ router.get("/:id", authenticateToken, async (req, res) => {
     res.json({ driver });
   } catch (err) {
     console.error("Get driver details error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Get latest incident (for real-time alerts)
+router.get("/latest-incident", authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        i.id,
+        i.driver_id,
+        i.vehicle_id,
+        i.incident_type,
+        i.description,
+        i.severity,
+        i.incident_date,
+        i.created_at,
+        i.incident_no,
+        d.name as driver_name,
+        v.vehicle_number
+      FROM incidents i
+      JOIN drivers d ON i.driver_id = d.id
+      JOIN vehicles v ON i.vehicle_id = v.id
+      WHERE d.user_id = $1
+      ORDER BY i.incident_date DESC NULLS LAST, i.created_at DESC
+      LIMIT 1
+    `;
+
+    const result = await pool.query(query, [req.userId]);
+
+    if (result.rows.length === 0) {
+      return res.json({ incident: null });
+    }
+
+    // Process the incident to ensure incident_no is present
+    const incident = result.rows[0];
+    if (incident.incident_no === null) {
+      // If incident_no is null, try to determine it from the incident_type
+      const { incident_no } = normalizeIncidentType(incident.incident_type);
+      incident.incident_no = incident_no;
+    }
+
+    res.json({
+      incident: {
+        id: incident.id,
+        driverId: incident.driver_id,
+        driverName: incident.driver_name,
+        vehicleNumber: incident.vehicle_number,
+        incidentType: incident.incident_type,
+        incidentNo: incident.incident_no,
+        timestamp: incident.created_at || incident.incident_date,
+        severity: incident.severity || 1,
+        description: incident.description || "",
+      },
+    });
+  } catch (err) {
+    console.error("Get latest incident error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

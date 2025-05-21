@@ -8,6 +8,8 @@ const rateLimit = require("express-rate-limit");
 const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpecs = require("./swagger");
+const http = require("http");
+const socketIo = require("socket.io");
 require("dotenv").config();
 
 // Import routes
@@ -20,7 +22,32 @@ const { authenticateToken } = require("./middleware/auth");
 
 // Create Express app
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: [
+      "http://localhost:3000",
+      "https://dbms-o3mb.onrender.com",
+      "https://dbms-client.onrender.com",
+      "https://dbmsystem.netlify.app",
+    ],
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
 const PORT = process.env.PORT || 3001;
+
+// Socket.io connection
+io.on("connection", (socket) => {
+  console.log("New client connected");
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected");
+  });
+});
+
+// Make io accessible to our routes
+app.set("io", io);
 
 // Middleware
 app.use(helmet());
@@ -33,7 +60,7 @@ const corsOptions = {
       "http://localhost:3000",
       "https://dbms-o3mb.onrender.com",
       "https://dbms-client.onrender.com",
-      "https://dbmsystem.netlify.app"
+      "https://dbmsystem.netlify.app",
     ];
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
@@ -93,8 +120,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server with Socket.io
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(
