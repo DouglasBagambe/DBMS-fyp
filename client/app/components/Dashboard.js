@@ -167,7 +167,7 @@ const Dashboard = () => {
             }
 
             // Get incident number, properly handling different field names
-            const incidentNo = incident.incidentNo || incident.incident_no;
+            const incidentNo = incident.incident_no;
 
             if (!incidentNo) {
               console.error("Invalid incident number", incident);
@@ -181,34 +181,27 @@ const Dashboard = () => {
               return;
             }
 
-            // Format the incident for display
-            const driverName =
-              incident.driverName || incident.driver_name || "Unknown Driver";
-            const vehicleNumber =
-              incident.vehicleNumber || incident.vehicle_number || "Unknown";
-            const timestamp = new Date(
-              incident.timestamp || incident.created_at || new Date()
-            );
+            // Use directly what's provided from the server
+            const driverName = incident.driver_name || "Unknown Driver";
+            const vehicleNumber = incident.vehicle_number || "Unknown";
+            const timestamp = new Date(incident.timestamp || new Date());
 
+            // Use a consistent format matching what components expect
             const formattedIncident = {
-              id: incident.id || Date.now(),
-              driverId: incident.driverId || incident.driver_id,
-              driver_id: incident.driverId || incident.driver_id, // Include both versions
-              driverName: driverName,
-              driver_name: driverName, // Include both versions
-              vehicleId: incident.vehicleId || incident.vehicle_id,
-              vehicle_id: incident.vehicleId || incident.vehicle_id, // Include both versions
-              vehicleNumber: vehicleNumber,
-              vehicle_number: vehicleNumber, // Include both versions
-              incidentNo: incidentNo,
-              incident_no: incidentNo, // Include both versions
-              incidentType: incident.incidentType || incident.incident_type,
-              incident_type: incident.incidentType || incident.incident_type, // Include both versions
-              timestamp,
-              created_at: incident.created_at || timestamp.toISOString(),
-              type: incidentInfo.type.toLowerCase(),
-              severity: incidentInfo.severity || incident.severity || "medium",
-              message: `Driver ${driverName}: ${incidentInfo.message}`,
+              id: incident.id || `incident-${Date.now()}`,
+              driver_id: incident.driver_id,
+              driver_name: driverName,
+              vehicle_id: incident.vehicle_id,
+              vehicle_number: vehicleNumber,
+              incident_no: incidentNo,
+              incident_type: incident.incident_type,
+              timestamp: timestamp,
+              severity: incidentInfo.severity || "medium",
+              type: "safety_incident",
+              // Use the message from backend if available, or create one
+              message:
+                incident.message ||
+                `Driver ${driverName}: ${incidentInfo.message}`,
             };
 
             console.log(
@@ -217,28 +210,30 @@ const Dashboard = () => {
             );
 
             // Update alerts state (add to beginning)
-            setDashboardData((prev) => {
-              // Create new alerts array with properly formatted incident at the beginning
+            setDashboardData((prevData) => {
+              // Make sure we have a proper prev state
+              const prevState = prevData || { alerts: [] };
+
               const updatedAlerts = [
                 formattedIncident,
-                ...(prev.alerts?.filter((a) => a.id !== formattedIncident.id) ||
-                  []),
-              ];
+                ...(prevState.alerts?.filter(
+                  (a) => a.id !== formattedIncident.id
+                ) || []),
+              ].slice(0, 20); // Keep only top 20
 
-              // Only keep the top 20 most recent
-              const trimmedAlerts = updatedAlerts.slice(0, 20);
-
-              console.log("Updated alerts list:", trimmedAlerts.length);
-              console.log("First 3 alerts:", trimmedAlerts.slice(0, 3));
+              console.log("Updated alerts list:", updatedAlerts.length);
+              console.log("First 3 alerts:", updatedAlerts.slice(0, 3));
 
               return {
-                ...prev,
-                alerts: trimmedAlerts,
+                ...prevState,
+                alerts: updatedAlerts,
               };
             });
 
             // Update activity data state
             setActivityData((prev) => {
+              const activityArray = prev || [];
+
               // Create new activity item
               const newActivity = {
                 id: `incident-${formattedIncident.id}`,
@@ -247,14 +242,16 @@ const Dashboard = () => {
                 message: formattedIncident.message,
                 timestamp,
                 displayTime: timestamp.toLocaleTimeString(),
-                incident_no: formattedIncident.incidentNo,
+                incident_no: formattedIncident.incident_no,
+                driver_name: driverName,
+                vehicle_number: vehicleNumber,
                 sortTime: timestamp.getTime(),
               };
 
               // Add at beginning if not already present, filter out duplicates
               const updatedActivities = [
                 newActivity,
-                ...(prev?.filter((a) => a.id !== newActivity.id) || []),
+                ...activityArray.filter((a) => a.id !== newActivity.id),
               ].slice(0, 20); // Keep only top 20
 
               console.log("Updated activity list:", updatedActivities.length);

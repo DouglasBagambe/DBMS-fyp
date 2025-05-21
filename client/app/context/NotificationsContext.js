@@ -228,8 +228,8 @@ export const NotificationsProvider = ({ children }) => {
             return;
           }
 
-          // Normalize the incident number field - check both formats
-          const incidentNo = incident.incidentNo || incident.incident_no;
+          // Normalize the incident number field - check both formats but prefer snake_case
+          const incidentNo = incident.incident_no;
 
           if (!incidentNo) {
             console.error(
@@ -239,35 +239,32 @@ export const NotificationsProvider = ({ children }) => {
             return;
           }
 
-          // Create normalized incident object to ensure consistent field names
+          // Create normalized incident object focused on snake_case field names
           const normalizedIncident = {
             id: incident.id || Date.now(),
-            driverId: incident.driverId || incident.driver_id,
-            driverName:
-              incident.driverName || incident.driver_name || "Unknown Driver",
-            vehicleId: incident.vehicleId || incident.vehicle_id,
-            vehicleNumber:
-              incident.vehicleNumber ||
-              incident.vehicle_number ||
-              "Unknown Vehicle",
-            incidentNo: incidentNo,
-            incident_no: incidentNo, // Include both versions for compatibility
-            incidentType: incident.incidentType || incident.incident_type,
-            incident_type: incident.incidentType || incident.incident_type,
-            timestamp:
-              incident.timestamp ||
-              incident.created_at ||
-              incident.incident_date ||
-              new Date().toISOString(),
+            driver_id: incident.driver_id,
+            driver_name: incident.driver_name || "Unknown Driver",
+            vehicle_id: incident.vehicle_id,
+            vehicle_number: incident.vehicle_number || "Unknown Vehicle",
+            incident_no: incidentNo,
+            incident_type: incident.incident_type,
+            timestamp: incident.timestamp || new Date().toISOString(),
             severity: incident.severity || 1,
             type: incident.type || "safety_incident",
+            message:
+              incident.message ||
+              `Safety incident reported for ${
+                incident.driver_name || "Unknown Driver"
+              }`,
           };
 
           console.log("Normalized incoming incident:", normalizedIncident);
 
           // Check if we should process this incident
           if (notificationSettings.highPriorityOnly) {
-            const incidentInfo = getIncidentInfo(normalizedIncident.incidentNo);
+            const incidentInfo = getIncidentInfo(
+              normalizedIncident.incident_no
+            );
             if (incidentInfo?.severity !== "high") {
               console.log(
                 "Ignoring non-high priority incident due to settings"
@@ -322,27 +319,10 @@ export const NotificationsProvider = ({ children }) => {
 
     console.log("Processing new incident:", incident);
 
-    // Normalize field names to ensure consistency
-    const normalizedIncident = {
-      id: incident.id || Date.now(),
-      driverId: incident.driverId || incident.driver_id,
-      driverName:
-        incident.driverName || incident.driver_name || "Unknown Driver",
-      vehicleId: incident.vehicleId || incident.vehicle_id,
-      vehicleNumber:
-        incident.vehicleNumber || incident.vehicle_number || "Unknown Vehicle",
-      incidentNo: incident.incidentNo || incident.incident_no,
-      incident_no: incident.incidentNo || incident.incident_no, // Add both formats
-      incidentType: incident.incidentType || incident.incident_type,
-      incident_type: incident.incidentType || incident.incident_type, // Add both formats
-      timestamp:
-        incident.timestamp ||
-        incident.created_at ||
-        incident.incident_date ||
-        new Date().toISOString(),
-    };
+    // Simplify since data is already normalized
+    const normalizedIncident = incident;
 
-    console.log("Normalized incident data:", normalizedIncident);
+    console.log("Using normalized incident:", normalizedIncident);
 
     // Store incident for display
     setAlertData({
@@ -355,10 +335,10 @@ export const NotificationsProvider = ({ children }) => {
     setShowAlert(true);
 
     // Get incident info for additional details
-    const incidentInfo = getIncidentInfo(normalizedIncident.incidentNo);
+    const incidentInfo = getIncidentInfo(normalizedIncident.incident_no);
     if (!incidentInfo) {
       console.error(
-        `No incident info found for incident number: ${normalizedIncident.incidentNo}`
+        `No incident info found for incident number: ${normalizedIncident.incident_no}`
       );
     } else {
       console.log("Found incident info:", incidentInfo);
@@ -391,9 +371,11 @@ export const NotificationsProvider = ({ children }) => {
       type: incidentInfo?.type || "UNKNOWN",
       severity: incidentInfo?.severity || "medium",
       alertType: "incident",
-      message: `${normalizedIncident.driverName}: ${
-        incidentInfo?.message || "Safety incident detected"
-      }`,
+      message:
+        normalizedIncident.message ||
+        `${normalizedIncident.driver_name}: ${
+          incidentInfo?.message || "Safety incident detected"
+        }`,
     };
 
     console.log("Adding notification to history:", newNotification);
@@ -404,9 +386,7 @@ export const NotificationsProvider = ({ children }) => {
     // Show desktop notification
     showDesktopNotification({
       title: "SAFETY ALERT!",
-      body: `${normalizedIncident.driverName}: ${
-        incidentInfo?.message || "Safety incident detected"
-      }`,
+      body: newNotification.message,
       tag: `incident-${normalizedIncident.id}`,
       requireInteraction: true,
       icon: "/favicon.ico",
