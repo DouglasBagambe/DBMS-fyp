@@ -184,6 +184,10 @@ const Analytics = () => {
     incidentTimeline: [],
     incidentsByVehicle: [],
     incidentsByDriver: [],
+    safetyScore: 0,
+    safetyRating: "Unknown",
+    chartData: [],
+    safetyDetails: {},
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -197,6 +201,13 @@ const Analytics = () => {
   const [alertIncident, setAlertIncident] = useState(null);
   const [socketStatus, setSocketStatus] = useState("disconnected");
   const socketRef = useRef(null);
+  const [mostCommonViolation, setMostCommonViolation] = useState({
+    type: "None",
+    count: 0,
+    incidentNo: 3,
+  });
+  const [mostCommonPercentage, setMostCommonPercentage] = useState(0);
+  const [totalIncidents, setTotalIncidents] = useState(0);
 
   // Connect to Socket.io server
   useEffect(() => {
@@ -710,11 +721,14 @@ const Analytics = () => {
         const incidentTimeline = allIncidents.slice(0, 10); // Just take the 10 most recent
 
         // Convert to percentages for chart
-        const totalIncidents =
-          incidentCounts.drowsiness +
-          incidentCounts.cigarette +
-          incidentCounts.seatbelt +
-          incidentCounts.phoneUsage;
+        const calculatedTotalIncidents =
+          (incidentCounts.drowsiness || 0) +
+          (incidentCounts.cigarette || 0) +
+          (incidentCounts.seatbelt || 0) +
+          (incidentCounts.phoneUsage || 0);
+
+        // Update the state with the total incident count
+        setTotalIncidents(calculatedTotalIncidents);
 
         // Process and filter trips
         let filteredTrips = [];
@@ -774,8 +788,10 @@ const Analytics = () => {
           {
             id: "Drowsiness",
             value:
-              totalIncidents > 0
-                ? Math.round((incidentCounts.drowsiness / totalIncidents) * 100)
+              calculatedTotalIncidents > 0
+                ? Math.round(
+                    (incidentCounts.drowsiness / calculatedTotalIncidents) * 100
+                  )
                 : 0,
             color: "hsl(10, 70%, 50%)",
             count: incidentCounts.drowsiness,
@@ -784,8 +800,10 @@ const Analytics = () => {
           {
             id: "Cigarette",
             value:
-              totalIncidents > 0
-                ? Math.round((incidentCounts.cigarette / totalIncidents) * 100)
+              calculatedTotalIncidents > 0
+                ? Math.round(
+                    (incidentCounts.cigarette / calculatedTotalIncidents) * 100
+                  )
                 : 0,
             color: "hsl(54, 70%, 50%)",
             count: incidentCounts.cigarette,
@@ -794,8 +812,10 @@ const Analytics = () => {
           {
             id: "Seatbelt",
             value:
-              totalIncidents > 0
-                ? Math.round((incidentCounts.seatbelt / totalIncidents) * 100)
+              calculatedTotalIncidents > 0
+                ? Math.round(
+                    (incidentCounts.seatbelt / calculatedTotalIncidents) * 100
+                  )
                 : 0,
             color: "hsl(103, 70%, 50%)",
             count: incidentCounts.seatbelt,
@@ -804,8 +824,10 @@ const Analytics = () => {
           {
             id: "Phone Usage",
             value:
-              totalIncidents > 0
-                ? Math.round((incidentCounts.phoneUsage / totalIncidents) * 100)
+              calculatedTotalIncidents > 0
+                ? Math.round(
+                    (incidentCounts.phoneUsage / calculatedTotalIncidents) * 100
+                  )
                 : 0,
             color: "hsl(176, 70%, 50%)",
             count: incidentCounts.phoneUsage,
@@ -817,13 +839,29 @@ const Analytics = () => {
         chartData.sort((a, b) => b.count - a.count);
 
         // Determine most common violation
-        let mostCommonViolation = { type: "None", count: 0 };
+        let mostCommonViolationType = { type: "None", count: 0, incidentNo: 3 };
+        let percentage = 0;
 
         if (chartData[0] && chartData[0].count > 0) {
-          mostCommonViolation = {
+          // Find which incident number corresponds to this type
+          let incidentNo = 3; // Default to seatbelt
+          if (chartData[0].id === "Phone Usage") incidentNo = 1;
+          else if (chartData[0].id === "Cigarette Usage") incidentNo = 2;
+          else if (chartData[0].id === "Drowsiness") incidentNo = 4;
+
+          mostCommonViolationType = {
             type: chartData[0].id,
             count: chartData[0].count,
+            incidentNo: incidentNo,
           };
+
+          // Calculate percentage
+          percentage =
+            calculatedTotalIncidents > 0
+              ? Math.round(
+                  (chartData[0].count / calculatedTotalIncidents) * 100
+                )
+              : 0;
         }
 
         // Update analytics state with processed data
@@ -839,13 +877,14 @@ const Analytics = () => {
         });
 
         // Update the most common violation state for use in UI
-        setMostCommonViolation(mostCommonViolation);
+        setMostCommonViolation(mostCommonViolationType);
+        setMostCommonPercentage(percentage);
 
         // Update the incident count in metrics
         if (selectedDriver !== "all" || selectedVehicle !== "all") {
           setMetrics((prevMetrics) => ({
             ...prevMetrics,
-            incidentCount: totalIncidents,
+            incidentCount: calculatedTotalIncidents,
           }));
         }
 
@@ -876,15 +915,21 @@ const Analytics = () => {
           });
         });
 
-        // Update analytics state
-        setAnalytics({
+        // Update analytics state - merge with previous state but include the new properties
+        setAnalytics((prevState) => ({
+          ...prevState,
           vehicles: filteredVehicles,
           drivers: filteredDrivers,
           incidents: incidentCounts,
           incidentTimeline,
           incidentsByVehicle: incidentsByVehicle,
           incidentsByDriver: incidentsByDriver,
-        });
+          // Keep the other properties we set earlier
+          chartData,
+          safetyScore: safetyScoreData.score || 0,
+          safetyRating: safetyScoreData.rating || "Unknown",
+          safetyDetails: safetyScoreData,
+        }));
       } catch (err) {
         console.error("Error fetching analytics data:", err);
         setError(err.message || "Failed to load analytics data");
@@ -961,11 +1006,12 @@ const Analytics = () => {
 
   // Data for bar chart - incidents by vehicle
   const barChartData = {
-    labels: analytics.incidentsByVehicle.map((item) => item.vehicleNumber),
+    labels:
+      analytics.incidentsByVehicle?.map((item) => item.vehicleNumber) || [],
     datasets: [
       {
         label: "Incidents",
-        data: analytics.incidentsByVehicle.map((item) => item.incidents),
+        data: analytics.incidentsByVehicle?.map((item) => item.incidents) || [],
         backgroundColor: "rgba(59, 130, 246, 0.8)", // Blue
         borderColor: "rgb(37, 99, 235)",
         borderWidth: 1,
@@ -985,12 +1031,14 @@ const Analytics = () => {
     ],
     datasets: [
       {
-        data: [
-          analytics.incidents.drowsiness,
-          analytics.incidents.cigarette,
-          analytics.incidents.seatbelt,
-          analytics.incidents.phoneUsage,
-        ],
+        data: analytics.incidents
+          ? [
+              analytics.incidents.drowsiness,
+              analytics.incidents.cigarette,
+              analytics.incidents.seatbelt,
+              analytics.incidents.phoneUsage,
+            ]
+          : [0, 0, 0, 0],
         backgroundColor: [
           "rgba(255, 152, 0, 0.85)", // Orange for drowsiness
           "rgba(244, 67, 54, 0.85)", // Red for cigarette
@@ -1094,7 +1142,7 @@ const Analytics = () => {
 
   // Find vehicles with highest and lowest incidents
   const vehicleWithMostIncidents =
-    analytics.incidentsByVehicle.length > 0
+    analytics.incidentsByVehicle && analytics.incidentsByVehicle.length > 0
       ? analytics.incidentsByVehicle.reduce(
           (max, vehicle) => (vehicle.incidents > max.incidents ? vehicle : max),
           { incidents: -1, vehicleNumber: "N/A" }
@@ -1102,7 +1150,7 @@ const Analytics = () => {
       : { incidents: 0, vehicleNumber: "N/A" };
 
   const vehicleWithLeastIncidents =
-    analytics.incidentsByVehicle.length > 0
+    analytics.incidentsByVehicle && analytics.incidentsByVehicle.length > 0
       ? analytics.incidentsByVehicle.reduce(
           (min, vehicle) => (vehicle.incidents < min.incidents ? vehicle : min),
           { incidents: Infinity, vehicleNumber: "N/A" }
@@ -1296,40 +1344,40 @@ const Analytics = () => {
         ) : (
           <>
             {/* Key Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-8">
+              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
+                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   Most Common Violation
                 </h3>
-                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mb-1">
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mb-0">
                   {mostCommonViolation.type}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {mostCommonPercentage}% of all violations
                 </p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
+                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   Total Violations
                 </h3>
-                <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mb-1">
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mb-0">
                   {totalIncidents}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   In selected period
                 </p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
+                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   Trips
                 </h3>
                 <div className="flex justify-center items-center">
-                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-0">
                     {metrics.totalTripsCount || 0}
                   </p>
                   {metrics.activeTrips > 0 && (
-                    <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-600">
-                      {metrics.activeTrips} active
+                    <span className="ml-1 px-1 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-600">
+                      {metrics.activeTrips}
                     </span>
                   )}
                 </div>
@@ -1337,13 +1385,13 @@ const Analytics = () => {
                   Total trips in period
                 </p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
+                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   {selectedVehicle === "all"
                     ? "Safest Vehicle"
                     : "Vehicle Driver"}
                 </h3>
-                <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mb-0">
                   {selectedVehicle === "all"
                     ? vehicleWithLeastIncidents.vehicleNumber
                     : analytics.vehicles.length > 0 &&
@@ -1364,12 +1412,12 @@ const Analytics = () => {
                     : "Vehicle unassigned"}
                 </p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
+                <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   Safety Score
                 </h3>
                 <div
-                  className={`text-3xl font-bold mb-1 ${
+                  className={`text-2xl font-bold mb-0 ${
                     analytics.safetyScore >= 90
                       ? "text-green-600 dark:text-green-400"
                       : analytics.safetyScore >= 80
@@ -1386,9 +1434,9 @@ const Analytics = () => {
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {analytics.safetyRating || "Rating: Excellent"}
                 </p>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mt-1">
                   <div
-                    className={`h-2 rounded-full ${
+                    className={`h-1 rounded-full ${
                       analytics.safetyScore >= 90
                         ? "bg-green-500"
                         : analytics.safetyScore >= 80
