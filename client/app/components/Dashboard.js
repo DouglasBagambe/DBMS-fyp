@@ -2,7 +2,7 @@
 // src/components/Dashboard.js
 
 "use client";
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useRef } from "react";
 import { Link } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 import {
@@ -29,8 +29,10 @@ import {
   getDrivers,
   getVehicles,
   getIncidents,
+  getLatestIncident,
 } from "../utils/api";
 import { useRouter } from "next/navigation";
+import { io } from "socket.io-client";
 
 const Dashboard = () => {
   const { user } = useContext(AuthContext);
@@ -54,6 +56,11 @@ const Dashboard = () => {
     description: "",
     incidentNo: 3, // Default to seatbelt
   });
+  // Add real-time alert states
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertIncident, setAlertIncident] = useState(null);
+  const socketRef = useRef(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   // Date filter state
   const [startDate, setStartDate] = useState(() => {
@@ -96,6 +103,155 @@ const Dashboard = () => {
   // Get incident type info based on incident_no
   const getIncidentTypeInfo = (incidentNo) => {
     return incidentTypeMap[incidentNo] || null;
+  };
+
+  // Setup socket connection and browser notifications
+  useEffect(() => {
+    // Request notification permission
+    const requestNotificationPermission = async () => {
+      if (!("Notification" in window)) {
+        console.log("This browser does not support desktop notifications");
+        return false;
+      }
+
+      if (Notification.permission === "granted") {
+        setNotificationsEnabled(true);
+        return true;
+      }
+
+      if (Notification.permission !== "denied") {
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          setNotificationsEnabled(true);
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    // Request permission when component mounts
+    requestNotificationPermission();
+
+    // Connect to Socket.io server
+    const API_URL =
+      process.env.NEXT_PUBLIC_API_URL || "https://dbms-o3mb.onrender.com";
+
+    const socket = io(API_URL, {
+      transports: ["websocket"],
+      withCredentials: true,
+    });
+
+    socketRef.current = socket;
+
+    // Listen for new incidents
+    socket.on("newIncident", (incident) => {
+      console.log("Dashboard received new incident:", incident);
+
+      // Create a new browser notification if enabled
+      if (notificationsEnabled) {
+        const incidentInfo = getIncidentTypeInfo(incident.incidentNo);
+        const severity = incidentInfo?.severity || "medium";
+
+        try {
+          const notification = new Notification("Fleet Safety Alert", {
+            body: `${incident.driverName}: ${
+              incidentInfo ? incidentInfo.message : "Safety violation detected"
+            }`,
+            icon: "/logo.png", // Add your logo path here
+            tag: "safety-alert",
+            vibrate: [200, 100, 200],
+          });
+
+          // Click on notification to open dashboard
+          notification.onclick = () => {
+            window.focus();
+            notification.close();
+          };
+
+          // Auto close after 10 seconds
+          setTimeout(() => notification.close(), 10000);
+        } catch (error) {
+          console.error("Error showing notification:", error);
+        }
+      }
+
+      // Set the alert data
+      setAlertIncident(incident);
+      setShowAlert(true);
+
+      // Update metrics and alerts
+      setMetrics((prev) => ({
+        ...prev,
+        recentIncidents: prev.recentIncidents + 1,
+      }));
+
+      // Format the incident for dashboard alerts
+      const newAlert = {
+        id: Date.now(),
+        message: `Driver ${incident.driverName}: ${
+          getIncidentTypeInfo(incident.incidentNo)?.message ||
+          "Safety violation detected"
+        }`,
+        timestamp: new Date(incident.timestamp).toLocaleTimeString(),
+        severity:
+          getIncidentTypeInfo(incident.incidentNo)?.severity || "medium",
+        driverId: incident.driverId,
+        vehicleId: incident.vehicleId,
+        type:
+          getIncidentTypeInfo(incident.incidentNo)?.type.toLowerCase() ||
+          "unknown",
+        incident_no: incident.incidentNo,
+      };
+
+      // Update dashboard data with new alert
+      setDashboardData((prevData) => ({
+        ...prevData,
+        alerts: [newAlert, ...prevData.alerts.slice(0, 2)], // Keep only the 3 most recent alerts
+      }));
+
+      // Auto-hide the alert after 10 seconds
+      setTimeout(() => {
+        setShowAlert(false);
+      }, 10000);
+    });
+
+    // Fetch latest incident on initial load to display any recent alerts
+    const fetchLatestIncident = async () => {
+      try {
+        const response = await getLatestIncident();
+        if (response && response.incident) {
+          // Only show alert if incident is less than 1 minute old
+          const incidentTime = new Date(response.incident.timestamp);
+          const now = new Date();
+          const timeDiff = (now - incidentTime) / 1000 / 60; // in minutes
+
+          if (timeDiff < 1) {
+            setAlertIncident(response.incident);
+            setShowAlert(true);
+
+            // Auto-hide after 10 seconds
+            setTimeout(() => {
+              setShowAlert(false);
+            }, 10000);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching latest incident:", error);
+      }
+    };
+
+    fetchLatestIncident();
+
+    // Clean up socket connection on unmount
+    return () => {
+      socket.disconnect();
+    };
+  }, [notificationsEnabled]);
+
+  // Close alert manually
+  const handleCloseAlert = () => {
+    setShowAlert(false);
   };
 
   // Fetch dashboard metrics, alerts, and activity
@@ -414,7 +570,95 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800 pt-12 px-4 sm:px-6 lg:px-8">
+      {/* Real-time incident alert */}
+      {showAlert && alertIncident && (
+        <div className="fixed top-4 right-4 max-w-md w-full z-50 animate-slide-in-right">
+          <div
+            className={`rounded-lg p-4 shadow-lg border ${getSeverityStyle(
+              getIncidentTypeInfo(alertIncident.incidentNo)?.severity ||
+                "medium"
+            )}`}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-start">
+                <div
+                  className={`p-2 rounded-lg ${
+                    getIncidentTypeInfo(alertIncident.incidentNo)?.severity ===
+                    "high"
+                      ? "bg-red-200 dark:bg-red-800/50"
+                      : getIncidentTypeInfo(alertIncident.incidentNo)
+                          ?.severity === "medium"
+                      ? "bg-amber-200 dark:bg-amber-800/50"
+                      : "bg-green-200 dark:bg-green-800/50"
+                  } mr-4`}
+                >
+                  {getAlertIcon(alertIncident.incidentNo)}
+                </div>
+                <div>
+                  <p className="font-bold text-red-600 dark:text-red-400">
+                    LIVE ALERT
+                  </p>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {alertIncident.driverName}:{" "}
+                    {getIncidentTypeInfo(alertIncident.incidentNo)?.message ||
+                      "Safety violation detected"}
+                  </h3>
+                  <div className="mt-1 flex items-center">
+                    <Car className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" />
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      Vehicle: {alertIncident.vehicleNumber}
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {new Date(alertIncident.timestamp).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseAlert}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                onClick={() => handleViewDriverDetails(alertIncident.driverId)}
+                className="flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600"
+              >
+                <Eye className="w-3 h-3 mr-1" />
+                Driver Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="my-4">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Welcome {user?.firstName || "User"}!
+          </h1>
+          
+          {/* Notification Permission Button */}
+          {("Notification" in window) && Notification.permission !== "granted" && (
+            <button
+              onClick={async () => {
+                const permission = await Notification.requestPermission();
+                if (permission === "granted") {
+                  setNotificationsEnabled(true);
+                }
+              }}
+              className="flex items-center px-3 py-1.5 text-sm font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600"
+            >
+              <Bell className="w-4 h-4 mr-1.5" />
+              Enable Notifications
+            </button>
+          )}
+        </div>
+      </div>
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Dashboard Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">

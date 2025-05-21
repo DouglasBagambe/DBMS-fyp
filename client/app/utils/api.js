@@ -415,3 +415,44 @@ export const getIncidents = async () => {
     throw new Error(error.response?.data?.error || "Failed to fetch incidents");
   }
 };
+
+// Get latest incident for real-time alerts
+export const getLatestIncident = async () => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const response = await axios.get(`${API_URL}/drivers/latest-incident`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch latest incident:", error);
+    return null; // Return null instead of throwing for a smoother UX
+  }
+};
+
+export default {
+  login,
+  signup,
+  updateUserProfile,
+  getUserProfile,
+  getVehicles,
+  addVehicle,
+  updateVehicle,
+  deleteVehicle,
+  getVehicleCount,
+  updateVehicleTrip,
+  getDrivers,
+  addDriver,
+  updateDriver,
+  deleteDriver,
+  recordIncident,
+  getActiveDriverCount,
+  getIncidentCount,
+  getDashboardMetrics,
+  getDriverDetails,
+  normalizeIncidentType,
+  getIncidents,
+  getLatestIncident
+};

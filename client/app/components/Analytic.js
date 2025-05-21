@@ -1,7 +1,7 @@
 // src/components/Analytic.js
 
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Bar, Pie, Line } from "react-chartjs-2";
 import {
   Bell,
@@ -25,8 +25,10 @@ import {
   getDrivers,
   getDashboardMetrics,
   getIncidents,
+  getLatestIncident,
 } from "../utils/api";
 import { useRouter } from "next/navigation";
+import { io } from "socket.io-client";
 
 // Import Chart.js modules
 import {
@@ -181,6 +183,130 @@ const Analytics = () => {
     activeDriverCount: 0,
     incidentCount: 0,
   });
+  // Add real-time alert states
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertIncident, setAlertIncident] = useState(null);
+  const socketRef = useRef(null);
+
+  // Connect to Socket.io server
+  useEffect(() => {
+    // Get API URL from environment or default to production URL
+    const API_URL =
+      process.env.NEXT_PUBLIC_API_URL || "https://dbms-o3mb.onrender.com";
+
+    // Connect to the Socket.io server
+    const socket = io(API_URL, {
+      transports: ["websocket"],
+      withCredentials: true,
+    });
+
+    socketRef.current = socket;
+
+    // Listen for new incidents
+    socket.on("newIncident", (incident) => {
+      console.log("Received new incident:", incident);
+
+      // Set the alert data
+      setAlertIncident(incident);
+      setShowAlert(true);
+
+      // Update the incident timeline with the new incident
+      setAnalytics((prevAnalytics) => {
+        // Format the incident for display
+        const formattedIncident = {
+          id: incident.id,
+          driverId: incident.driverId,
+          driverName: incident.driverName,
+          vehicleNumber: incident.vehicleNumber,
+          incidentNo: incident.incidentNo,
+          type: getIncidentTypeInfo(incident.incidentNo)?.type || "UNKNOWN",
+          timestamp: incident.timestamp,
+          formattedTime: new Date(incident.timestamp).toLocaleString(),
+          severity: getIncidentSeverity(incident.incidentNo),
+          message: `${incident.driverName}: ${getIncidentMessage(
+            incident.incidentNo
+          )}`,
+        };
+
+        // Add to timeline and keep only the 5 most recent
+        const updatedTimeline = [
+          formattedIncident,
+          ...prevAnalytics.incidentTimeline.slice(0, 4),
+        ];
+
+        // Update incident counts
+        const updatedIncidents = { ...prevAnalytics.incidents };
+        switch (Number(incident.incidentNo)) {
+          case 1: // Phone usage
+            updatedIncidents.phoneUsage++;
+            break;
+          case 2: // Cigarette
+            updatedIncidents.cigarette++;
+            break;
+          case 3: // Seatbelt
+            updatedIncidents.seatbelt++;
+            break;
+          case 4: // Drowsiness
+            updatedIncidents.drowsiness++;
+            break;
+        }
+
+        return {
+          ...prevAnalytics,
+          incidents: updatedIncidents,
+          incidentTimeline: updatedTimeline,
+        };
+      });
+
+      // Update metrics count
+      setMetrics((prevMetrics) => ({
+        ...prevMetrics,
+        incidentCount: prevMetrics.incidentCount + 1,
+      }));
+
+      // Auto-hide the alert after 10 seconds
+      setTimeout(() => {
+        setShowAlert(false);
+      }, 10000);
+    });
+
+    // Fetch latest incident on initial load to display any recent alerts
+    const fetchLatestIncident = async () => {
+      try {
+        const response = await getLatestIncident();
+        if (response && response.incident) {
+          // Only show alert if incident is less than 1 minute old
+          const incidentTime = new Date(response.incident.timestamp);
+          const now = new Date();
+          const timeDiff = (now - incidentTime) / 1000 / 60; // in minutes
+
+          if (timeDiff < 1) {
+            setAlertIncident(response.incident);
+            setShowAlert(true);
+
+            // Auto-hide after 10 seconds
+            setTimeout(() => {
+              setShowAlert(false);
+            }, 10000);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching latest incident:", error);
+      }
+    };
+
+    fetchLatestIncident();
+
+    // Clean up socket connection on unmount
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  // Close alert manually
+  const handleCloseAlert = () => {
+    setShowAlert(false);
+  };
 
   // Map date range to days for filtering
   const getDaysFromRange = (range) => {
@@ -524,6 +650,7 @@ const Analytics = () => {
 
     fetchData();
   }, [dateRange, selectedVehicle, selectedDriver]);
+
   // Get CSS classes for incident severity
   const getSeverityStyle = (severity) => {
     switch (severity.toLowerCase()) {
@@ -784,6 +911,69 @@ const Analytics = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Real-time incident alert */}
+        {showAlert && alertIncident && (
+          <div className="fixed top-4 right-4 max-w-md w-full z-50 animate-slide-in-right">
+            <div
+              className={`rounded-lg p-4 shadow-lg border ${getSeverityStyle(
+                getIncidentSeverity(alertIncident.incidentNo)
+              )}`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-start">
+                  <div
+                    className={`p-2 rounded-lg ${
+                      getIncidentSeverity(alertIncident.incidentNo) === "high"
+                        ? "bg-red-200 dark:bg-red-800/50"
+                        : getIncidentSeverity(alertIncident.incidentNo) ===
+                          "medium"
+                        ? "bg-amber-200 dark:bg-amber-800/50"
+                        : "bg-green-200 dark:bg-green-800/50"
+                    } mr-4`}
+                  >
+                    {getIncidentIcon(alertIncident.incidentNo)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-red-600 dark:text-red-400">
+                      LIVE ALERT
+                    </p>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {alertIncident.driverName}:{" "}
+                      {getIncidentMessage(alertIncident.incidentNo)}
+                    </h3>
+                    <div className="mt-1 flex items-center">
+                      <Car className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" />
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Vehicle: {alertIncident.vehicleNumber}
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {new Date(alertIncident.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCloseAlert}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={() =>
+                    handleViewDriverDetails(alertIncident.driverId)
+                  }
+                  className="flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600"
+                >
+                  <Eye className="w-3 h-3 mr-1" />
+                  Driver Details
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
           <div className="mb-4 md:mb-0">
