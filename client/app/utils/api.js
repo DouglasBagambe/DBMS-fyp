@@ -432,6 +432,87 @@ export const getLatestIncident = async () => {
   }
 };
 
+// Trip management functions
+export const startTrip = async (driverId) => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const response = await axios.post(
+      `${API_URL}/trips/${driverId}/start`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || "Failed to start trip");
+  }
+};
+
+export const endTrip = async (driverId, distance) => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const response = await axios.post(
+      `${API_URL}/trips/${driverId}/end`,
+      { distance },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || "Failed to end trip");
+  }
+};
+
+export const getDriverTrips = async (driverId) => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const response = await cachedGet(`${API_URL}/trips/driver/${driverId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.error || "Failed to get driver trips"
+    );
+  }
+};
+
+export const getAllTrips = async () => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const response = await cachedGet(`${API_URL}/trips`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || "Failed to get all trips");
+  }
+};
+
+export const getTripCounts = async () => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const response = await cachedGet(`${API_URL}/trips/counts`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || "Failed to get trip counts");
+  }
+};
+
 export default {
   login,
   signup,
@@ -454,5 +535,10 @@ export default {
   getDriverDetails,
   normalizeIncidentType,
   getIncidents,
-  getLatestIncident
+  getLatestIncident,
+  startTrip,
+  endTrip,
+  getDriverTrips,
+  getAllTrips,
+  getTripCounts,
 };

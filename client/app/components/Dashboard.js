@@ -27,6 +27,8 @@ import {
   getDrivers,
   getVehicles,
   getIncidents,
+  getTripCounts,
+  getAllTrips,
 } from "../utils/api";
 import { useRouter } from "next/navigation";
 import { useNotifications } from "../context/NotificationsContext";
@@ -87,6 +89,9 @@ const Dashboard = () => {
         const vehicles = await getVehicles();
         // Fetch incidents directly
         const incidents = await getIncidents();
+        // Fetch trip data
+        const tripCounts = await getTripCounts();
+        const allTrips = await getAllTrips();
 
         // Filter incidents by date range if provided
         const filteredIncidents =
@@ -110,20 +115,22 @@ const Dashboard = () => {
           (driver) => driver.vehicle && driver.vehicle !== "None"
         ).length;
 
-        // Calculate total trips (sum of last_trip counts from vehicles)
-        const totalTrips = vehicles.vehicles.reduce((sum, vehicle) => {
-          if (!vehicle.last_trip) return sum;
+        // Get total trips from the trip data (completed trips in date range)
+        const totalTrips = tripCounts.total_trips || 0;
 
-          const tripDate = new Date(vehicle.last_trip);
-          const start = new Date(startDate);
-          const end = new Date(endDate);
-          end.setHours(23, 59, 59, 999);
+        // Filter trips by date range
+        const filteredTrips = allTrips.trips
+          ? allTrips.trips.filter((trip) => {
+              if (!startDate || !endDate) return true;
 
-          if (tripDate >= start && tripDate <= end) {
-            return sum + 1;
-          }
-          return sum;
-        }, 0);
+              const tripDate = new Date(trip.start_time);
+              const start = new Date(startDate);
+              const end = new Date(endDate);
+              end.setHours(23, 59, 59, 999);
+
+              return tripDate >= start && tripDate <= end;
+            })
+          : [];
 
         // Calculate average driver score
         const averageScore =
@@ -219,22 +226,34 @@ const Dashboard = () => {
         // Set safety recommendation based on most common violation
         setSafetyRecommendation(getRecommendationByType(mostCommonIncidentNo));
 
-        // Process activity data based on vehicle trips and incidents
+        // Process activity data based on real trips and incidents
         const activity = [
-          ...vehicles.vehicles
-            .filter((vehicle) => {
-              if (!vehicle.last_trip) return false;
-              const tripDate = new Date(vehicle.last_trip);
-              const start = new Date(startDate);
-              const end = new Date(endDate);
-              end.setHours(23, 59, 59, 999);
-              return tripDate >= start && tripDate <= end;
-            })
-            .map((vehicle, index) => ({
-              id: `trip-${index}`,
+          // Add trip started events
+          ...filteredTrips
+            .filter((trip) => trip.status !== "cancelled")
+            .map((trip, index) => ({
+              id: `trip-start-${trip.id}`,
+              type: "trip_start",
+              message: `Driver ${trip.driver_name} started trip with vehicle ${trip.vehicle_number}`,
+              timestamp: new Date(trip.start_time).toLocaleTimeString(),
+              driver_id: trip.driver_id,
+              vehicle_id: trip.vehicle_id,
+            })),
+          // Add trip ended events
+          ...filteredTrips
+            .filter((trip) => trip.status === "completed" && trip.end_time)
+            .map((trip, index) => ({
+              id: `trip-end-${trip.id}`,
               type: "safe",
-              message: `Vehicle ${vehicle.vehicle_number} completed trip safely`,
-              timestamp: new Date(vehicle.last_trip).toLocaleTimeString(),
+              message: `Driver ${
+                trip.driver_name
+              } completed trip with vehicle ${trip.vehicle_number}${
+                trip.distance ? ` (${trip.distance} km)` : ""
+              }`,
+              timestamp: new Date(trip.end_time).toLocaleTimeString(),
+              driver_id: trip.driver_id,
+              vehicle_id: trip.vehicle_id,
+              duration: trip.duration ? `${trip.duration} min` : null,
             })),
           ...(filteredIncidents || [])
             .filter(
@@ -268,6 +287,8 @@ const Dashboard = () => {
           safeDrivingPercentage,
           averageScore,
           alerts,
+          activeTrips: tripCounts.active_trips || 0,
+          tripsToday: tripCounts.trips_today || 0,
         });
         setActivityData(activity);
       } catch (err) {
@@ -371,6 +392,8 @@ const Dashboard = () => {
         return <AlertTriangle className="w-5 h-5 text-amber-500" />;
       case "danger":
         return <AlertTriangle className="w-5 h-5 text-red-500" />;
+      case "trip_start":
+        return <Car className="w-5 h-5 text-blue-500" />;
       default:
         return <CheckCircle className="w-5 h-5 text-green-500" />;
     }
@@ -489,16 +512,24 @@ const Dashboard = () => {
                 <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
                   {dashboardData.totalTrips}
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {startDate === endDate
-                    ? `On ${new Date(startDate).toLocaleDateString()}`
-                    : `From ${new Date(
-                        startDate
-                      ).toLocaleDateString()} to ${new Date(
-                        endDate
-                      ).toLocaleDateString()}`}
-                </p>
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {startDate === endDate
+                      ? `On ${new Date(startDate).toLocaleDateString()}`
+                      : `From ${new Date(
+                          startDate
+                        ).toLocaleDateString()} to ${new Date(
+                          endDate
+                        ).toLocaleDateString()}`}
+                  </p>
+                  <div className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-600">
+                    {tripCounts && tripCounts.active_trips
+                      ? `${tripCounts.active_trips} active now`
+                      : "0 active"}
+                  </div>
+                </div>
               </div>
+
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
@@ -533,6 +564,7 @@ const Dashboard = () => {
                   ></div>
                 </div>
               </div>
+
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">

@@ -26,6 +26,8 @@ import {
   getDashboardMetrics,
   getIncidents,
   getLatestIncident,
+  getAllTrips,
+  getTripCounts,
 } from "../utils/api";
 import { useRouter } from "next/navigation";
 
@@ -213,6 +215,49 @@ const Analytics = () => {
           // Set the alert data
           setAlertIncident(incident);
           setShowAlert(true);
+        });
+
+        // Listen for trip updates
+        socket.on("tripUpdate", (tripEvent) => {
+          console.log("Received trip update:", tripEvent);
+
+          // Update the incident timeline with the trip event
+          setAnalytics((prevAnalytics) => {
+            // Format the trip event for display
+            const formattedEvent = {
+              id: `trip-${tripEvent.trip_id}`,
+              driverId: tripEvent.driver_id,
+              driverName: tripEvent.driver_name,
+              vehicleNumber: tripEvent.vehicle_number,
+              type: tripEvent.type, // 'trip_started' or 'trip_ended'
+              timestamp: tripEvent.timestamp,
+              formattedTime: new Date(tripEvent.timestamp).toLocaleString(),
+              severity: "low", // trips are not violations
+              message:
+                tripEvent.type === "trip_started"
+                  ? `${tripEvent.driver_name} started a trip with vehicle ${tripEvent.vehicle_number}`
+                  : `${tripEvent.driver_name} completed a trip with vehicle ${
+                      tripEvent.vehicle_number
+                    }${
+                      tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
+                    }${
+                      tripEvent.duration_minutes
+                        ? ` in ${tripEvent.duration_minutes} min`
+                        : ""
+                    }`,
+            };
+
+            // Add to timeline and keep only the 5 most recent
+            const updatedTimeline = [
+              formattedEvent,
+              ...prevAnalytics.incidentTimeline.slice(0, 4),
+            ];
+
+            return {
+              ...prevAnalytics,
+              incidentTimeline: updatedTimeline,
+            };
+          });
 
           // Update the incident timeline with the new incident
           setAnalytics((prevAnalytics) => {
@@ -337,17 +382,21 @@ const Analytics = () => {
       setError(null);
 
       try {
-        // Fetch dashboard metrics, vehicles, drivers and incidents data
+        // Fetch dashboard metrics, vehicles, drivers, incidents and trips data
         const [
           metricsData,
           vehiclesResponse,
           driversResponse,
           incidentsResponse,
+          tripsResponse,
+          tripCountsResponse,
         ] = await Promise.all([
           getDashboardMetrics(),
           getVehicles(),
           getDrivers(),
           getIncidents(),
+          getAllTrips(),
+          getTripCounts(),
         ]);
 
         // Log what we're filtering by
@@ -364,6 +413,11 @@ const Analytics = () => {
             activeDriverCount:
               selectedDriver !== "all" ? 1 : metricsData.activeDriverCount || 0,
             incidentCount: 0, // Will be updated after filtering incidents
+            totalTrips: 0, // Will be updated after filtering trips
+            activeTrips:
+              selectedDriver !== "all" || selectedVehicle !== "all"
+                ? 0 // Start with 0 for filtered view
+                : tripCountsResponse.active_trips || 0,
           };
           setMetrics(customMetrics);
         } else {
@@ -372,6 +426,8 @@ const Analytics = () => {
             vehicleCount: metricsData.vehicleCount || 0,
             activeDriverCount: metricsData.activeDriverCount || 0,
             incidentCount: metricsData.incidentCount || 0,
+            totalTrips: tripCountsResponse.total_trips || 0,
+            activeTrips: tripCountsResponse.active_trips || 0,
           });
         }
 
@@ -587,9 +643,69 @@ const Analytics = () => {
         // Output incident counts for debugging
         console.log("Processed incident counts:", incidentCounts);
 
-        // Update the incident count in metrics now that we've counted them
+        // Process and filter trips
+        let filteredTrips = [];
+        if (tripsResponse && tripsResponse.trips) {
+          filteredTrips = tripsResponse.trips;
+
+          // Apply driver filter
+          if (selectedDriver !== "all") {
+            filteredTrips = filteredTrips.filter(
+              (trip) => String(trip.driver_id) === String(selectedDriver)
+            );
+          }
+
+          // Apply vehicle filter
+          if (selectedVehicle !== "all") {
+            filteredTrips = filteredTrips.filter(
+              (trip) => trip.vehicle_number === selectedVehicle
+            );
+          }
+
+          // Apply date range filter
+          if (dateRange !== "all") {
+            const days = getDaysFromRange(dateRange);
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - days);
+
+            filteredTrips = filteredTrips.filter(
+              (trip) => new Date(trip.start_time) >= cutoffDate
+            );
+          }
+
+          // Count active trips
+          const activeTrips = filteredTrips.filter(
+            (trip) => trip.status === "active"
+          ).length;
+
+          // Add trips to activity timeline
+          filteredTrips.slice(0, 5).forEach((trip) => {
+            const tripEvent = {
+              id: `trip-${trip.id}`,
+              driverId: trip.driver_id,
+              driverName: trip.driver_name,
+              vehicleNumber: trip.vehicle_number,
+              type: trip.status === "completed" ? "safe" : "trip_start",
+              timestamp: trip.start_time,
+              formattedTime: new Date(trip.start_time).toLocaleString(),
+              severity: "low",
+              message:
+                trip.status === "completed"
+                  ? `${trip.driver_name} completed trip with vehicle ${
+                      trip.vehicle_number
+                    }${trip.distance ? ` (${trip.distance} km)` : ""}${
+                      trip.duration ? ` in ${trip.duration} min` : ""
+                    }`
+                  : `${trip.driver_name} started trip with vehicle ${trip.vehicle_number}`,
+            };
+
+            allIncidents.push(tripEvent);
+          });
+        }
+
+        // Update the metrics now that we've counted incidents and trips
         if (selectedDriver !== "all" || selectedVehicle !== "all") {
-          // Update the custom metrics with actual incident count
+          // Update the custom metrics with actual counts
           const totalIncidents =
             incidentCounts.drowsiness +
             incidentCounts.cigarette +
@@ -598,6 +714,10 @@ const Analytics = () => {
           setMetrics((prevMetrics) => ({
             ...prevMetrics,
             incidentCount: totalIncidents,
+            totalTrips: filteredTrips.length,
+            activeTrips: filteredTrips.filter(
+              (trip) => trip.status === "active"
+            ).length,
           }));
         }
 
@@ -1062,7 +1182,7 @@ const Analytics = () => {
         ) : (
           <>
             {/* Key Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Most Common Violation
@@ -1083,6 +1203,24 @@ const Analytics = () => {
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   In selected period
+                </p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                  Trips
+                </h3>
+                <div className="flex justify-center items-center">
+                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">
+                    {metrics.totalTrips || 0}
+                  </p>
+                  {metrics.activeTrips > 0 && (
+                    <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-600">
+                      {metrics.activeTrips} active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Total trips in period
                 </p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center">
