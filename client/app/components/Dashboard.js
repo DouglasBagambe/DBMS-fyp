@@ -360,7 +360,6 @@ const Dashboard = () => {
         const allTrips = await getAllTrips();
 
         // Filter incidents by date range if provided
-        // Filter incidents by date range if provided
         const filteredIncidents =
           incidents && Array.isArray(incidents)
             ? incidents.filter((incident) => {
@@ -464,29 +463,51 @@ const Dashboard = () => {
             }
           });
 
-          // Get the most recent 3 incidents
-          alerts = validIncidents.slice(0, 3).map((incident, index) => {
-            // Get incident type info based on incident_no
-            const incidentInfo = getIncidentInfo(incident.incident_no);
+          // Get the most recent 20 incidents (not just 3)
+          alerts = validIncidents
+            .sort((a, b) => {
+              // Sort by created_at timestamp, newest first
+              const dateA = new Date(a.created_at || a.incident_date);
+              const dateB = new Date(b.created_at || b.incident_date);
+              return dateB - dateA;
+            })
+            .slice(0, 20)
+            .map((incident, index) => {
+              // Get incident type info based on incident_no
+              const incidentInfo = getIncidentInfo(incident.incident_no);
 
-            // Ensure driver name and vehicle number are available
-            const driverName = incident.driver_name || "Unknown Driver";
-            const vehicleNumber = incident.vehicle_number || "Unknown Vehicle";
+              // Ensure driver name and vehicle number are available
+              const driverName = incident.driver_name || "Unknown Driver";
+              const vehicleNumber =
+                incident.vehicle_number || "Unknown Vehicle";
 
-            return {
-              id: index + 1,
-              message: `Driver ${incident.driver_name}: ${incidentInfo.message}`,
-              timestamp: new Date(incident.created_at).toLocaleTimeString(),
-              severity: incidentInfo.severity,
-              driverName: incident.driver_name,
-              vehicleNumber: incident.vehicle_number,
-              driverId: incident.driver_id,
-              vehicleId: incident.vehicle_id,
-              type: incidentInfo.type.toLowerCase(),
-              incident_no: incident.incident_no,
-            };
-          });
+              return {
+                id: incident.id || index + 1,
+                message: `Driver ${driverName}: ${incidentInfo.message}`,
+                timestamp: new Date(
+                  incident.created_at || incident.incident_date
+                ).toLocaleTimeString(),
+                severity: incidentInfo.severity,
+                driverName,
+                vehicleNumber,
+                driverId: incident.driver_id,
+                vehicleId: incident.vehicle_id,
+                type: incidentInfo.type.toLowerCase(),
+                incident_no: incident.incident_no,
+                created_at: incident.created_at || incident.incident_date,
+              };
+            });
         }
+
+        console.log(
+          "Fetched incidents:",
+          filteredIncidents ? filteredIncidents.length : 0
+        );
+        console.log("Valid alerts for display:", alerts.length);
+
+        // Make sure we're not working with undefined variables in processAllActivity
+        window.filteredIncidents = filteredIncidents || [];
+        window.filteredTrips = filteredTrips || [];
 
         // Determine the most common violation type
         let mostCommonIncidentNo = 3; // Default to seatbelt
@@ -503,7 +524,7 @@ const Dashboard = () => {
         setSafetyRecommendation(getRecommendationByType(mostCommonIncidentNo));
 
         // Process activity data based on real trips and incidents - fixed to properly sort by timestamp
-        const activity = processAllActivity();
+        const activity = processAllActivity(filteredIncidents, filteredTrips);
 
         setDashboardData({
           totalTrips,
@@ -636,14 +657,18 @@ const Dashboard = () => {
   };
 
   // Process activity data based on real trips and incidents - fixed to properly sort by timestamp
-  const processAllActivity = () => {
+  const processAllActivity = (filteredIncidents, filteredTrips) => {
     try {
       // Create arrays for all activities
       const allActivities = [];
 
+      // Use the parameters or fall back to window variables if needed
+      const incidents = filteredIncidents || window.filteredIncidents || [];
+      const trips = filteredTrips || window.filteredTrips || [];
+
       // Add trip started events
-      if (filteredTrips && filteredTrips.length > 0) {
-        filteredTrips
+      if (trips && trips.length > 0) {
+        trips
           .filter((trip) => trip.status !== "cancelled" && trip.start_time)
           .forEach((trip) => {
             const startTime = new Date(trip.start_time);
@@ -663,8 +688,8 @@ const Dashboard = () => {
       }
 
       // Add trip ended events
-      if (filteredTrips && filteredTrips.length > 0) {
-        filteredTrips
+      if (trips && trips.length > 0) {
+        trips
           .filter((trip) => trip.status === "completed" && trip.end_time)
           .forEach((trip) => {
             const endTime = new Date(trip.end_time);
@@ -687,8 +712,8 @@ const Dashboard = () => {
       }
 
       // Add incidents
-      if (filteredIncidents && filteredIncidents.length > 0) {
-        filteredIncidents
+      if (incidents && incidents.length > 0) {
+        incidents
           .filter(
             (incident) =>
               incident &&
@@ -720,6 +745,9 @@ const Dashboard = () => {
             });
           });
       }
+
+      // Log the number of activities before sorting
+      console.log("Total activities before sorting:", allActivities.length);
 
       // Sort all activities by timestamp (newest first)
       allActivities.sort((a, b) => b.sortTime - a.sortTime);
@@ -1065,7 +1093,7 @@ const Dashboard = () => {
                   <div className="p-6">
                     {dashboardData.alerts && dashboardData.alerts.length > 0 ? (
                       <div
-                        className="space-y-4 max-h-[400px] overflow-y-auto pr-2"
+                        className="space-y-4 max-h-[600px] overflow-y-auto pr-2"
                         style={{
                           scrollbarWidth: "thin",
                           scrollbarColor: "#CBD5E0 #EDF2F7",
@@ -1097,7 +1125,9 @@ const Dashboard = () => {
                                   </h4>
                                   <div className="flex items-center space-x-1 text-sm">
                                     <Clock className="w-4 h-4" />
-                                    <span>{alert.timestamp}</span>
+                                    <span title={alert.created_at}>
+                                      {alert.timestamp}
+                                    </span>
                                   </div>
                                 </div>
                                 <div className="mt-2 flex items-center">
@@ -1119,7 +1149,7 @@ const Dashboard = () => {
                             <div className="flex justify-end mt-3 space-x-2">
                               <button
                                 onClick={() =>
-                                  handleViewDriverDetails(alert.driverName)
+                                  handleViewDriverDetails(alert.driverId)
                                 }
                                 className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors duration-200 ease-in-out shadow-sm hover:shadow-md"
                               >
