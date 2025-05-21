@@ -334,7 +334,8 @@ router.post("/:id/incidents", authenticateToken, async (req, res) => {
       timestamp: incidentResult.rows[0].created_at || incidentResult.rows[0].incident_date,
       severity: severityNum || 1,
       description: description || "",
-      type: "safety_incident" // Add explicit type like trips have
+      type: "safety_incident",
+      message: `Driver ${driverName} had a ${incidentType} incident in vehicle ${vehicleNumber}`
     };
 
     // Emit the incident alert to all connected clients
