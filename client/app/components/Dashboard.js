@@ -523,8 +523,8 @@ const Dashboard = () => {
                         ).toLocaleDateString()}`}
                   </p>
                   <div className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-600">
-                    {tripCounts && tripCounts.active_trips
-                      ? `${tripCounts.active_trips} active now`
+                    {dashboardData.activeTrips
+                      ? `${dashboardData.activeTrips} active now`
                       : "0 active"}
                   </div>
                 </div>
