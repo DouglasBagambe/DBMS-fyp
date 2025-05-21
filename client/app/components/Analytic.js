@@ -1359,27 +1359,92 @@ const Analytics = () => {
                   In selected period
                 </p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                  Total Vehicles
+              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">
+                  Driver Safety
                 </h3>
-                <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
-                  {metrics.vehicleCount}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  In the system
-                </p>
+                <div className="flex justify-between">
+                  <div className="text-center flex-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+                    <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase">
+                      Safest Driver
+                    </p>
+                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
+                      {analytics.drivers && analytics.drivers.length > 0
+                        ? analytics.drivers
+                            .reduce((prev, curr) =>
+                              curr.incidents < prev.incidents ? curr : prev
+                            )
+                            .name.split(" ")[0]
+                        : "N/A"}
+                    </p>
+                    <div className="inline-flex items-center bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded mt-1">
+                      <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                      <span className="text-xs text-green-700 dark:text-green-400">
+                        0 incidents
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-center flex-1 pl-2">
+                    <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase">
+                      Needs Attention
+                    </p>
+                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
+                      {analytics.drivers && analytics.drivers.length > 0
+                        ? analytics.drivers
+                            .reduce(
+                              (prev, curr) =>
+                                curr.incidents > prev.incidents ? curr : prev,
+                              { incidents: -1 }
+                            )
+                            .name?.split(" ")[0] || "N/A"
+                        : "N/A"}
+                    </p>
+                    <div className="inline-flex items-center bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded mt-1">
+                      <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                      <span className="text-xs text-red-700 dark:text-red-400">
+                        {analytics.drivers && analytics.drivers.length > 0
+                          ? analytics.drivers.reduce(
+                              (prev, curr) =>
+                                curr.incidents > prev.incidents ? curr : prev,
+                              { incidents: -1 }
+                            ).incidents
+                          : 0}{" "}
+                        incidents
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Safety Score
                 </h3>
-                <p className="text-3xl font-bold text-primary-600 dark:text-primary-400 mb-1">
+                <p
+                  className={`text-3xl font-bold mb-1 ${
+                    analytics.safetyScore >= 70
+                      ? "text-green-600 dark:text-green-400"
+                      : analytics.safetyScore >= 50
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}
+                >
                   {analytics.safetyScore}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                   {analytics.safetyRating} rating
                 </p>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                  <div
+                    className={`h-1.5 rounded-full ${
+                      analytics.safetyScore >= 70
+                        ? "bg-green-500"
+                        : analytics.safetyScore >= 50
+                        ? "bg-amber-500"
+                        : "bg-red-500"
+                    }`}
+                    style={{ width: `${analytics.safetyScore}%` }}
+                  ></div>
+                </div>
               </div>
             </div>
 
@@ -1389,7 +1454,27 @@ const Analytics = () => {
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
                 {analytics.incidentsByVehicle &&
                 analytics.incidentsByVehicle.length > 0 ? (
-                  <Bar data={barChartData} options={barChartOptions} />
+                  <Bar
+                    data={{
+                      labels: analytics.incidentsByVehicle.map(
+                        (item) => item.vehicleNumber
+                      ),
+                      datasets: [
+                        {
+                          label: "Incidents",
+                          data: analytics.incidentsByVehicle.map(
+                            (item) => item.incidents
+                          ),
+                          backgroundColor: "rgba(59, 130, 246, 0.8)",
+                          borderColor: "rgb(37, 99, 235)",
+                          borderWidth: 1,
+                          borderRadius: 6,
+                          hoverBackgroundColor: "rgba(59, 130, 246, 1)",
+                        },
+                      ],
+                    }}
+                    options={barChartOptions}
+                  />
                 ) : (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-gray-500 dark:text-gray-400">
