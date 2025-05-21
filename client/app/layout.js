@@ -16,6 +16,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata = {
   title: "DBMS - Driver Behavior Monitoring System",
   description: "Real-time Driver Behavior Monitoring System for safer roads in Uganda",
+  icons: {
+    icon: "/dbms-logo1.svg",
+  },
 };
 
 export default function RootLayout({ children }) {
