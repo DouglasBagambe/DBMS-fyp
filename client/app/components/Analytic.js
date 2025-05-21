@@ -962,18 +962,50 @@ const Analytics = () => {
           }));
         }
 
-        // Group incidents by vehicle
+        // Group incidents by vehicle - Fixed to count actual incidents rather than just incidents in timeline
         const incidentsByVehicle = [];
+
+        // Create a map to count incidents per vehicle
+        const vehicleIncidentCounts = {};
+
+        // Count all filtered incidents by vehicle_number
+        if (filteredIncidents && filteredIncidents.length > 0) {
+          filteredIncidents.forEach((incident) => {
+            if (!incident || !incident.vehicle_number) return;
+
+            const vehicleNumber = incident.vehicle_number;
+
+            if (!vehicleIncidentCounts[vehicleNumber]) {
+              vehicleIncidentCounts[vehicleNumber] = 0;
+            }
+
+            // Increment the count for this vehicle
+            vehicleIncidentCounts[vehicleNumber] += 1;
+
+            // Log for debugging
+            console.log(
+              `Counted incident for vehicle ${vehicleNumber}, total now: ${vehicleIncidentCounts[vehicleNumber]}`
+            );
+          });
+        }
+
+        // Now create the incidentsByVehicle array using the complete counts
         filteredVehicles.forEach((vehicle) => {
-          const vehicleIncidents = incidentTimeline.filter(
-            (i) => i.vehicleNumber === vehicle.vehicleNumber
-          );
+          const count = vehicleIncidentCounts[vehicle.vehicleNumber] || 0;
 
           incidentsByVehicle.push({
             vehicleNumber: vehicle.vehicleNumber,
-            incidents: vehicleIncidents.length,
+            incidents: count, // Use the full count from all incidents, not just timeline
           });
+
+          // Log for debugging
+          console.log(
+            `Vehicle ${vehicle.vehicleNumber} has ${count} incidents`
+          );
         });
+
+        // Sort by incident count (highest first) for better visualization
+        incidentsByVehicle.sort((a, b) => b.incidents - a.incidents);
 
         // Group incidents by driver
         const incidentsByDriver = [];
@@ -1586,15 +1618,17 @@ const Analytics = () => {
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              {/* Bar Chart - Replacing with Line Graph */}
+              {/* Incidents Line Chart */}
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
                 {analytics &&
                 analytics.incidentsByVehicle &&
                 analytics.incidentsByVehicle.length > 0 ? (
                   <Line
                     data={{
-                      labels: analytics.incidentsByVehicle.map(
-                        (item) => item.vehicleNumber
+                      labels: analytics.incidentsByVehicle.map((item) =>
+                        item.vehicleNumber.length > 8
+                          ? item.vehicleNumber.substring(0, 8) + "..."
+                          : item.vehicleNumber
                       ),
                       datasets: [
                         {
@@ -1609,7 +1643,9 @@ const Analytics = () => {
                           pointBackgroundColor: "rgb(37, 99, 235)",
                           pointBorderColor: "#fff",
                           pointBorderWidth: 2,
-                          pointRadius: 4,
+                          pointRadius: 5,
+                          pointHoverRadius: 7,
+                          borderWidth: 3,
                         },
                       ],
                     }}
@@ -1625,6 +1661,23 @@ const Analytics = () => {
                           text: "Incidents by Vehicle",
                           font: {
                             size: 16,
+                            weight: "bold",
+                          },
+                          padding: {
+                            top: 10,
+                            bottom: 20,
+                          },
+                        },
+                        tooltip: {
+                          callbacks: {
+                            label: function (context) {
+                              return `${context.raw} incidents`;
+                            },
+                            title: function (context) {
+                              const vehicleIdx = context[0].dataIndex;
+                              return analytics.incidentsByVehicle[vehicleIdx]
+                                .vehicleNumber;
+                            },
                           },
                         },
                       },
@@ -1634,6 +1687,19 @@ const Analytics = () => {
                           ticks: {
                             precision: 0,
                             stepSize: 1,
+                          },
+                          title: {
+                            display: true,
+                            text: "Number of Incidents",
+                          },
+                        },
+                        x: {
+                          title: {
+                            display: true,
+                            text: "Vehicle",
+                          },
+                          grid: {
+                            display: false,
                           },
                         },
                       },
