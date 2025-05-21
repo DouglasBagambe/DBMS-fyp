@@ -1004,12 +1004,11 @@ const Analytics = () => {
 
   // Data for bar chart - incidents by vehicle
   const barChartData = {
-    labels:
-      analytics.incidentsByVehicle?.map((item) => item.vehicleNumber) || [],
+    labels: analytics.incidentsByVehicle.map((item) => item.vehicleNumber),
     datasets: [
       {
         label: "Incidents",
-        data: analytics.incidentsByVehicle?.map((item) => item.incidents) || [],
+        data: analytics.incidentsByVehicle.map((item) => item.incidents),
         backgroundColor: "rgba(59, 130, 246, 0.8)", // Blue
         borderColor: "rgb(37, 99, 235)",
         borderWidth: 1,
@@ -1368,9 +1367,6 @@ const Analytics = () => {
                   <div className="text-center py-1">
                     {analytics.vehicles && analytics.vehicles.length > 0 ? (
                       <>
-                        <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center mx-auto mb-2">
-                          <UserCircle className="w-10 h-10 text-primary-500" />
-                        </div>
                         <p className="text-lg font-bold text-gray-800 dark:text-gray-200">
                           {analytics.vehicles[0]?.driverName || "Unassigned"}
                         </p>
@@ -1502,58 +1498,8 @@ const Analytics = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               {/* Bar Chart */}
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
-                {analytics.incidentsByVehicle &&
-                analytics.incidentsByVehicle.length > 0 ? (
-                  <div
-                    style={{
-                      position: "relative",
-                      height: "100%",
-                      width: "100%",
-                    }}
-                  >
-                    <Bar
-                      data={{
-                        labels: analytics.incidentsByVehicle.map(
-                          (v) => v.vehicleNumber || "Unknown"
-                        ),
-                        datasets: [
-                          {
-                            label: "Incidents",
-                            data: analytics.incidentsByVehicle.map(
-                              (v) => v.incidents || 0
-                            ),
-                            backgroundColor: "rgba(59, 130, 246, 0.8)",
-                            borderColor: "rgb(37, 99, 235)",
-                            borderWidth: 1,
-                            hoverBackgroundColor: "rgba(59, 130, 246, 1)",
-                          },
-                        ],
-                      }}
-                      options={{
-                        maintainAspectRatio: false,
-                        responsive: true,
-                        plugins: {
-                          legend: { display: false },
-                          title: {
-                            display: true,
-                            text: "Incidents by Vehicle",
-                            font: { size: 16, weight: "bold" },
-                            color: "#374151",
-                            padding: { top: 10, bottom: 20 },
-                          },
-                        },
-                        scales: {
-                          y: {
-                            beginAtZero: true,
-                            ticks: { color: "#6B7280" },
-                          },
-                          x: {
-                            ticks: { color: "#6B7280" },
-                          },
-                        },
-                      }}
-                    />
-                  </div>
+                {analytics.incidentsByVehicle.length > 0 ? (
+                  <Bar data={barChartData} options={barChartOptions} />
                 ) : (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-gray-500 dark:text-gray-400">
