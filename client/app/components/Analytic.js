@@ -563,12 +563,14 @@ const Analytics = () => {
 
         // Process incidents from API response
         let allIncidents = [];
+        // Initialize filteredIncidents here to avoid undefined error
+        let filteredIncidents = [];
 
         console.log("DEBUGGING: Processing incidents from API");
 
         if (incidentsResponse && Array.isArray(incidentsResponse)) {
           // Filter incidents based on selected driver/vehicle if needed
-          let filteredIncidents = incidentsResponse;
+          filteredIncidents = incidentsResponse;
 
           // Apply driver filter
           if (selectedDriver !== "all") {

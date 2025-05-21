@@ -560,25 +560,6 @@ const Dashboard = () => {
               Real-time monitoring for safer roads in Uganda
             </p>
           </div>
-          <div className="flex flex-col items-end">
-            <div className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 font-medium">
-              <UserCircle className="w-5 h-5" />
-              <span>
-                {user
-                  ? user.gender === "male"
-                    ? `Mr. ${user.first_name} ${user.last_name}`
-                    : user.gender === "female"
-                    ? `Ms. ${user.first_name} ${user.last_name}`
-                    : `${user.first_name} ${user.last_name}`
-                  : "Fleet Manager"}
-              </span>
-            </div>
-            <div className="flex items-center mt-1 text-gray-500 dark:text-gray-400 text-sm">
-              <Clock className="w-4 h-4 mr-1" />
-              <span>{getCurrentDate()}</span>
-            </div>
-          </div>
-          
           {/* Socket Status */}
           <div className="flex justify-end items-center text-sm mb-4">
             <div className={`flex items-center ${
@@ -616,6 +597,24 @@ const Dashboard = () => {
                 Reconnect
               </button>
             )}
+          </div>
+          <div className="flex flex-col items-end">
+            <div className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 font-medium">
+              <UserCircle className="w-5 h-5" />
+              <span>
+                {user
+                  ? user.gender === "male"
+                    ? `Mr. ${user.first_name} ${user.last_name}`
+                    : user.gender === "female"
+                    ? `Ms. ${user.first_name} ${user.last_name}`
+                    : `${user.first_name} ${user.last_name}`
+                  : "Fleet Manager"}
+              </span>
+            </div>
+            <div className="flex items-center mt-1 text-gray-500 dark:text-gray-400 text-sm">
+              <Clock className="w-4 h-4 mr-1" />
+              <span>{getCurrentDate()}</span>
+            </div>
           </div>
         </div>
 
