@@ -221,6 +221,7 @@ const Analytics = () => {
     const setupSocketConnection = async () => {
       try {
         setSocketStatus("connecting");
+        console.log("Setting up socket connection for Analytics...");
 
         // Dynamically import socket.io-client only on the client side
         const { io } = await import("socket.io-client");
@@ -250,136 +251,211 @@ const Analytics = () => {
           setSocketStatus("error");
         });
 
-        // Listen for new incidents
+        // Enhanced listener for new incidents with better error handling
         socket.on("newIncident", (incident) => {
-          console.log("Received new incident in Analytics:", incident);
+          try {
+            console.log("Received new incident in Analytics:", incident);
+            // Validate incident data exists
+            if (!incident) {
+              console.error("Received empty incident data");
+              return;
+            }
 
-          // Set the alert data
-          setAlertIncident(incident);
-          setShowAlert(true);
+            // Set the alert data
+            setAlertIncident(incident);
+            setShowAlert(true);
 
-          // Update the incident timeline with the new incident
-          setAnalytics((prevAnalytics) => {
-            // Format the incident for display
-            const formattedIncident = {
-              id: incident.id || `incident-${Date.now()}`,
-              driverId: incident.driverId || incident.driver_id,
-              driverName:
-                incident.driverName || incident.driver_name || "Unknown Driver",
-              vehicleNumber:
-                incident.vehicleNumber ||
-                incident.vehicle_number ||
-                "Unknown Vehicle",
-              incidentNo: incident.incidentNo || incident.incident_no,
-              type:
-                getIncidentTypeInfo(incident.incidentNo || incident.incident_no)
-                  ?.type || "UNKNOWN",
-              timestamp:
-                incident.timestamp ||
-                incident.created_at ||
-                new Date().toISOString(),
+            // Get driver name from incident or use fallback
+            const driverName =
+              incident.driverName || incident.driver_name || "Unknown Driver";
+
+            // Get incident number, properly handling different field names
+            const incidentNo = incident.incidentNo || incident.incident_no;
+
+            if (!incidentNo) {
+              console.error("Invalid incident number", incident);
+              return;
+            }
+
+            // Update the incident timeline with the new incident
+            setAnalytics((prevAnalytics) => {
+              // Format the incident for display
+              const formattedIncident = {
+                id: incident.id || `incident-${Date.now()}`,
+                driverId: incident.driverId || incident.driver_id,
+                driverName,
+                vehicleNumber:
+                  incident.vehicleNumber ||
+                  incident.vehicle_number ||
+                  "Unknown Vehicle",
+                incidentNo,
+                type: getIncidentTypeInfo(incidentNo)?.type || "UNKNOWN",
+                timestamp:
+                  incident.timestamp ||
+                  incident.created_at ||
+                  new Date().toISOString(),
+                formattedTime: new Date(
+                  incident.timestamp || incident.created_at || new Date()
+                ).toLocaleString(),
+                severity: getIncidentSeverity(incidentNo),
+                message: `${driverName}: ${getIncidentMessage(incidentNo)}`,
+              };
+
+              // Add to timeline and keep only the most recent ones
+              const updatedTimeline = [
+                formattedIncident,
+                ...prevAnalytics.incidentTimeline.slice(0, 9),
+              ];
+
+              // Update incident counts
+              const updatedIncidents = { ...prevAnalytics.incidents };
+              switch (Number(incidentNo)) {
+                case 1: // Phone usage
+                  updatedIncidents.phoneUsage++;
+                  break;
+                case 2: // Cigarette
+                  updatedIncidents.cigarette++;
+                  break;
+                case 3: // Seatbelt
+                  updatedIncidents.seatbelt++;
+                  break;
+                case 4: // Drowsiness
+                  updatedIncidents.drowsiness++;
+                  break;
+              }
+
+              // Also update vehicle incidents count for chart
+              const updatedVehicles = [...prevAnalytics.vehicles];
+              const vehicleIndex = updatedVehicles.findIndex(
+                (v) => v.vehicleNumber === formattedIncident.vehicleNumber
+              );
+
+              if (vehicleIndex >= 0) {
+                updatedVehicles[vehicleIndex] = {
+                  ...updatedVehicles[vehicleIndex],
+                  incidents: (updatedVehicles[vehicleIndex].incidents || 0) + 1,
+                };
+              }
+
+              // Update incidentsByVehicle for bar chart
+              const updatedIncidentsByVehicle = [
+                ...(prevAnalytics.incidentsByVehicle || []),
+              ];
+              const vehicleIncidentIndex = updatedIncidentsByVehicle.findIndex(
+                (v) => v.vehicleNumber === formattedIncident.vehicleNumber
+              );
+
+              if (vehicleIncidentIndex >= 0) {
+                updatedIncidentsByVehicle[vehicleIncidentIndex] = {
+                  ...updatedIncidentsByVehicle[vehicleIncidentIndex],
+                  incidents:
+                    updatedIncidentsByVehicle[vehicleIncidentIndex].incidents +
+                    1,
+                };
+              } else if (
+                formattedIncident.vehicleNumber !== "Unknown Vehicle"
+              ) {
+                updatedIncidentsByVehicle.push({
+                  vehicleNumber: formattedIncident.vehicleNumber,
+                  incidents: 1,
+                });
+              }
+
+              return {
+                ...prevAnalytics,
+                incidents: updatedIncidents,
+                incidentTimeline: updatedTimeline,
+                vehicles: updatedVehicles,
+                incidentsByVehicle: updatedIncidentsByVehicle,
+              };
+            });
+
+            // Update metrics count
+            setMetrics((prevMetrics) => ({
+              ...prevMetrics,
+              incidentCount: prevMetrics.incidentCount + 1,
+            }));
+
+            // Auto-hide the alert after 10 seconds
+            setTimeout(() => {
+              setShowAlert(false);
+            }, 10000);
+          } catch (err) {
+            console.error("Error processing incoming incident:", err);
+          }
+        });
+
+        // Enhanced trip update listener with better error handling
+        socket.on("tripUpdate", (tripEvent) => {
+          try {
+            console.log("Received trip update in Analytics:", tripEvent);
+
+            if (!tripEvent) {
+              console.error("Received empty trip data");
+              return;
+            }
+
+            // Format the trip event for display
+            const formattedEvent = {
+              id: `trip-${tripEvent.trip_id || Date.now()}`,
+              driverId: tripEvent.driver_id,
+              driverName: tripEvent.driver_name || "Unknown Driver",
+              vehicleNumber: tripEvent.vehicle_number || "Unknown Vehicle",
+              type: tripEvent.type, // 'trip_started' or 'trip_ended'
+              timestamp: tripEvent.timestamp || new Date().toISOString(),
               formattedTime: new Date(
-                incident.timestamp || incident.created_at || new Date()
+                tripEvent.timestamp || new Date()
               ).toLocaleString(),
-              severity: getIncidentSeverity(
-                incident.incidentNo || incident.incident_no
-              ),
-              message: `${
-                incident.driverName || incident.driver_name
-              }: ${getIncidentMessage(
-                incident.incidentNo || incident.incident_no
-              )}`,
+              severity: "low", // trips are not violations
+              message:
+                tripEvent.type === "trip_started"
+                  ? `${tripEvent.driver_name} started a trip with vehicle ${tripEvent.vehicle_number}`
+                  : `${tripEvent.driver_name} completed a trip with vehicle ${
+                      tripEvent.vehicle_number
+                    }${
+                      tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
+                    }${
+                      tripEvent.duration_minutes
+                        ? ` in ${tripEvent.duration_minutes} min`
+                        : ""
+                    }`,
             };
 
             // Add to timeline and keep only the most recent ones
-            const updatedTimeline = [
-              formattedIncident,
-              ...prevAnalytics.incidentTimeline.slice(0, 9),
-            ];
+            setAnalytics((prevAnalytics) => {
+              const updatedTimeline = [
+                formattedEvent,
+                ...prevAnalytics.incidentTimeline.slice(0, 9),
+              ];
 
-            // Update incident counts
-            const updatedIncidents = { ...prevAnalytics.incidents };
-            switch (Number(incident.incidentNo || incident.incident_no)) {
-              case 1: // Phone usage
-                updatedIncidents.phoneUsage++;
-                break;
-              case 2: // Cigarette
-                updatedIncidents.cigarette++;
-                break;
-              case 3: // Seatbelt
-                updatedIncidents.seatbelt++;
-                break;
-              case 4: // Drowsiness
-                updatedIncidents.drowsiness++;
-                break;
+              return {
+                ...prevAnalytics,
+                incidentTimeline: updatedTimeline,
+              };
+            });
+
+            // Show notification for trips too
+            setAlertIncident({
+              ...tripEvent,
+              incidentNo: 0, // Special code for trips
+              message: formattedEvent.message,
+            });
+            setShowAlert(true);
+
+            // Auto-hide the trip alert after 6 seconds
+            setTimeout(() => {
+              setShowAlert(false);
+            }, 6000);
+
+            // Update trip metrics when a trip is completed
+            if (tripEvent.type === "trip_ended") {
+              setMetrics((prevMetrics) => ({
+                ...prevMetrics,
+                totalTripsCount: prevMetrics.totalTripsCount + 1,
+              }));
             }
-
-            return {
-              ...prevAnalytics,
-              incidents: updatedIncidents,
-              incidentTimeline: updatedTimeline,
-            };
-          });
-
-          // Update metrics count
-          setMetrics((prevMetrics) => ({
-            ...prevMetrics,
-            incidentCount: prevMetrics.incidentCount + 1,
-          }));
-
-          // Auto-hide the alert after 10 seconds
-          setTimeout(() => {
-            setShowAlert(false);
-          }, 10000);
-        });
-
-        // Listen for trip updates
-        socket.on("tripUpdate", (tripEvent) => {
-          console.log("Received trip update in Analytics:", tripEvent);
-
-          // Format the trip event for display
-          const formattedEvent = {
-            id: `trip-${tripEvent.trip_id || Date.now()}`,
-            driverId: tripEvent.driver_id,
-            driverName: tripEvent.driver_name || "Unknown Driver",
-            vehicleNumber: tripEvent.vehicle_number || "Unknown Vehicle",
-            type: tripEvent.type, // 'trip_started' or 'trip_ended'
-            timestamp: tripEvent.timestamp || new Date().toISOString(),
-            formattedTime: new Date(
-              tripEvent.timestamp || new Date()
-            ).toLocaleString(),
-            severity: "low", // trips are not violations
-            message:
-              tripEvent.type === "trip_started"
-                ? `${tripEvent.driver_name} started a trip with vehicle ${tripEvent.vehicle_number}`
-                : `${tripEvent.driver_name} completed a trip with vehicle ${
-                    tripEvent.vehicle_number
-                  }${tripEvent.distance ? ` (${tripEvent.distance} km)` : ""}${
-                    tripEvent.duration_minutes
-                      ? ` in ${tripEvent.duration_minutes} min`
-                      : ""
-                  }`,
-          };
-
-          // Add to timeline and keep only the most recent ones
-          setAnalytics((prevAnalytics) => {
-            const updatedTimeline = [
-              formattedEvent,
-              ...prevAnalytics.incidentTimeline.slice(0, 9),
-            ];
-
-            return {
-              ...prevAnalytics,
-              incidentTimeline: updatedTimeline,
-            };
-          });
-
-          // Update trip metrics when a trip is completed
-          if (tripEvent.type === "trip_ended") {
-            setMetrics((prevMetrics) => ({
-              ...prevMetrics,
-              totalTripsCount: prevMetrics.totalTripsCount + 1,
-            }));
+          } catch (err) {
+            console.error("Error processing trip update:", err);
           }
         });
       } catch (err) {
@@ -1002,20 +1078,54 @@ const Analytics = () => {
     router.push(`/driver-details?driverId=${driverId}`);
   };
 
-  // Data for bar chart - incidents by vehicle
+  // Replace existing bar chart data and options with completely rewritten implementation
   const barChartData = {
     labels: analytics.incidentsByVehicle.map((item) => item.vehicleNumber),
     datasets: [
       {
-        label: "Incidents",
+        label: "Safety Incidents",
         data: analytics.incidentsByVehicle.map((item) => item.incidents),
-        backgroundColor: "rgba(59, 130, 246, 0.8)", // Blue
+        backgroundColor: "rgba(59, 130, 246, 0.8)",
         borderColor: "rgb(37, 99, 235)",
         borderWidth: 1,
         borderRadius: 6,
-        hoverBackgroundColor: "rgba(59, 130, 246, 1)",
       },
     ],
+  };
+
+  // Simplified bar chart options
+  const barChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      title: {
+        display: true,
+        text: "Incidents by Vehicle",
+        font: {
+          size: 16,
+          weight: "bold",
+        },
+      },
+      tooltip: {
+        enabled: true,
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        ticks: {
+          precision: 0,
+        },
+      },
+    },
   };
 
   // Data for pie chart - incident type breakdown
@@ -1052,49 +1162,6 @@ const Analytics = () => {
         hoverOffset: 4,
       },
     ],
-  };
-
-  // Options for bar chart
-  const barChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      title: {
-        display: true,
-        text: "Incidents by Vehicle",
-        font: { size: 16, weight: "bold" },
-        color: "#374151",
-        padding: { top: 10, bottom: 20 },
-      },
-      tooltip: {
-        backgroundColor: "rgba(0, 0, 0, 0.8)",
-        padding: 12,
-        titleFont: { size: 14 },
-        bodyFont: { size: 13 },
-        titleColor: "white",
-        bodyColor: "white",
-        borderColor: "rgba(255, 255, 255, 0.2)",
-        borderWidth: 1,
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { color: "#6B7280", font: { size: 12 } },
-        grid: { color: "rgba(156, 163, 175, 0.1)", drawBorder: false },
-        border: { display: false },
-      },
-      x: {
-        ticks: { color: "#6B7280", font: { size: 12 } },
-        grid: { display: false },
-        border: { display: false },
-      },
-    },
-    animation: {
-      duration: 1000,
-      easing: "easeOutQuart",
-    },
   };
 
   // Options for pie chart
@@ -1161,15 +1228,22 @@ const Analytics = () => {
         {showAlert && alertIncident && (
           <div className="fixed top-4 right-4 max-w-md w-full z-50 animate-slide-in-right">
             <div
-              className={`rounded-lg p-4 shadow-lg border ${getSeverityStyle(
-                getIncidentSeverity(alertIncident.incidentNo)
-              )}`}
+              className={`rounded-lg p-4 shadow-lg border ${
+                alertIncident.incidentNo
+                  ? getSeverityStyle(
+                      getIncidentSeverity(alertIncident.incidentNo)
+                    )
+                  : "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border-l-4 border-blue-500" // For trips
+              }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start">
                   <div
                     className={`p-2 rounded-lg ${
-                      getIncidentSeverity(alertIncident.incidentNo) === "high"
+                      !alertIncident.incidentNo
+                        ? "bg-blue-200 dark:bg-blue-800/50" // Trip updates
+                        : getIncidentSeverity(alertIncident.incidentNo) ===
+                          "high"
                         ? "bg-red-200 dark:bg-red-800/50"
                         : getIncidentSeverity(alertIncident.incidentNo) ===
                           "medium"
@@ -1177,20 +1251,32 @@ const Analytics = () => {
                         : "bg-green-200 dark:bg-green-800/50"
                     } mr-4`}
                   >
-                    {getIncidentIcon(alertIncident.incidentNo)}
+                    {alertIncident.incidentNo ? (
+                      getIncidentIcon(alertIncident.incidentNo)
+                    ) : (
+                      <Car className="w-5 h-5" />
+                    )}
                   </div>
                   <div>
                     <p className="font-bold text-red-600 dark:text-red-400">
-                      LIVE ALERT
+                      {alertIncident.incidentNo
+                        ? "SAFETY ALERT"
+                        : "TRIP UPDATE"}
                     </p>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {alertIncident.driverName}:{" "}
-                      {getIncidentMessage(alertIncident.incidentNo)}
+                      {alertIncident.message ||
+                        (alertIncident.incidentNo
+                          ? `${alertIncident.driverName}: ${getIncidentMessage(
+                              alertIncident.incidentNo
+                            )}`
+                          : `Trip update for ${alertIncident.driver_name}`)}
                     </h3>
                     <div className="mt-1 flex items-center">
                       <Car className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" />
                       <p className="text-sm text-gray-600 dark:text-gray-300">
-                        Vehicle: {alertIncident.vehicleNumber}
+                        Vehicle:{" "}
+                        {alertIncident.vehicleNumber ||
+                          alertIncident.vehicle_number}
                       </p>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -1206,15 +1292,19 @@ const Analytics = () => {
                 </button>
               </div>
               <div className="mt-3 flex justify-end">
-                <button
-                  onClick={() =>
-                    handleViewDriverDetails(alertIncident.driverId)
-                  }
-                  className="flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600"
-                >
-                  <Eye className="w-3 h-3 mr-1" />
-                  Driver Details
-                </button>
+                {(alertIncident.driverId || alertIncident.driver_id) && (
+                  <button
+                    onClick={() =>
+                      handleViewDriverDetails(
+                        alertIncident.driverId || alertIncident.driver_id
+                      )
+                    }
+                    className="flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-primary-500 text-white hover:bg-primary-600"
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    Driver Details
+                  </button>
+                )}
               </div>
             </div>
           </div>

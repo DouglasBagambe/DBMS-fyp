@@ -123,83 +123,148 @@ const Dashboard = () => {
           setSocketStatus("error");
         });
 
-        // Listen for new incidents in real-time
+        // Enhanced listener for new incidents in real-time with better error handling
         socket.on("newIncident", (incident) => {
-          console.log("Received new incident in Dashboard:", incident);
-          
-          // Format the incident for display
-          const incidentInfo = getIncidentInfo(incident.incidentNo || incident.incident_no);
-          if (!incidentInfo) return;
+          try {
+            console.log("Received new incident in Dashboard:", incident);
+            // Validate incident data
+            if (!incident) {
+              console.error("Received empty incident data");
+              return;
+            }
+            
+            // Get incident number, properly handling different field names
+            const incidentNo = incident.incidentNo || incident.incident_no;
+            
+            if (!incidentNo) {
+              console.error("Invalid incident number", incident);
+              return;
+            }
+            
+            // Get incident type info
+            const incidentInfo = getIncidentInfo(incidentNo);
+            if (!incidentInfo) {
+              console.error(`Unknown incident type: ${incidentNo}`);
+              return;
+            }
 
-          const formattedIncident = {
-            id: incident.id || Date.now(),
-            driverId: incident.driverId || incident.driver_id,
-            driverName: incident.driverName || incident.driver_name,
-            vehicleId: incident.vehicleId || incident.vehicle_id,
-            vehicleNumber: incident.vehicleNumber || incident.vehicle_number,
-            incidentNo: incident.incidentNo || incident.incident_no,
-            timestamp: incident.timestamp || new Date().toISOString(),
-            type: incidentInfo.type.toLowerCase(),
-            severity: incidentInfo.severity,
-            message: `Driver ${incident.driverName || incident.driver_name}: ${incidentInfo.message}`,
-          };
-          
-          // Update alerts state (add to beginning)
-          setDashboardData(prev => ({
-            ...prev,
-            alerts: [formattedIncident, ...prev.alerts.slice(0, 2)]
-          }));
-          
-          // Update activity data state 
-          setActivityData(prev => [{
-            id: `incident-${formattedIncident.id}`,
-            type: formattedIncident.severity === "high" ? "danger" : "warning",
-            message: formattedIncident.message,
-            timestamp: new Date(formattedIncident.timestamp).toLocaleTimeString(),
-            incident_no: formattedIncident.incidentNo,
-          }, ...prev.slice(0, 19)]);
-          
-          // Update metrics
-          setMetrics(prev => ({
-            ...prev,
-            recentIncidents: prev.recentIncidents + 1
-          }));
+            // Format the incident for display
+            const driverName = incident.driverName || incident.driver_name || "Unknown Driver";
+            const vehicleNumber = incident.vehicleNumber || incident.vehicle_number || "Unknown";
+            
+            const formattedIncident = {
+              id: incident.id || Date.now(),
+              driverId: incident.driverId || incident.driver_id,
+              driverName,
+              vehicleId: incident.vehicleId || incident.vehicle_id,
+              vehicleNumber,
+              incidentNo,
+              timestamp: incident.timestamp || incident.created_at || new Date().toISOString(),
+              type: incidentInfo.type.toLowerCase(),
+              severity: incidentInfo.severity,
+              message: `Driver ${driverName}: ${incidentInfo.message}`,
+            };
+            
+            // Update alerts state (add to beginning)
+            setDashboardData(prev => ({
+              ...prev,
+              alerts: [formattedIncident, ...prev.alerts.slice(0, 2)]
+            }));
+            
+            // Update activity data state 
+            setActivityData(prev => [{
+              id: `incident-${formattedIncident.id}`,
+              type: formattedIncident.severity === "high" ? "danger" : "warning",
+              message: formattedIncident.message,
+              timestamp: new Date(formattedIncident.timestamp).toLocaleTimeString(),
+              incident_no: formattedIncident.incidentNo,
+            }, ...prev.slice(0, 19)]);
+            
+            // Update metrics
+            setMetrics(prev => ({
+              ...prev,
+              recentIncidents: prev.recentIncidents + 1
+            }));
+            
+            // Add browser notification if supported
+            if ("Notification" in window) {
+              if (Notification.permission === "granted") {
+                new Notification("Driver Safety Alert", {
+                  body: formattedIncident.message,
+                  icon: "/favicon.ico"
+                });
+              } else if (Notification.permission !== "denied") {
+                Notification.requestPermission().then(permission => {
+                  if (permission === "granted") {
+                    new Notification("Driver Safety Alert", {
+                      body: formattedIncident.message,
+                      icon: "/favicon.ico"
+                    });
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            console.error("Error processing new incident:", err);
+          }
         });
 
-        // Listen for trip updates in real-time
+        // Enhanced listener for trip updates in real-time with better error handling
         socket.on("tripUpdate", (tripEvent) => {
-          console.log("Received trip update in Dashboard:", tripEvent);
-          
-          // Format the trip activity 
-          const activityType = tripEvent.type === "trip_started" ? "trip_start" : "safe";
-          const message = tripEvent.type === "trip_started"
-            ? `Driver ${tripEvent.driver_name} started trip with vehicle ${tripEvent.vehicle_number}`
-            : `Driver ${tripEvent.driver_name} completed trip with vehicle ${tripEvent.vehicle_number}${
-                tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
-              }`;
-              
-          // Update activity data
-          setActivityData(prev => [{
-            id: `trip-${tripEvent.trip_id || Date.now()}`,
-            type: activityType,
-            message,
-            timestamp: new Date(tripEvent.timestamp || new Date()).toLocaleTimeString(),
-            driver_id: tripEvent.driver_id,
-            vehicle_id: tripEvent.vehicle_id,
-          }, ...prev.slice(0, 19)]);
-          
-          // Update metrics if a trip is completed
-          if (tripEvent.type === "trip_ended") {
-            setDashboardData(prev => ({
-              ...prev,
-              totalTrips: prev.totalTrips + 1,
-            }));
-          } else if (tripEvent.type === "trip_started") {
-            // If trip started, increment active trips count
-            setDashboardData(prev => ({
-              ...prev,
-              activeTrips: prev.activeTrips + 1,
-            }));
+          try {
+            console.log("Received trip update in Dashboard:", tripEvent);
+            // Validate trip data
+            if (!tripEvent) {
+              console.error("Received empty trip data");
+              return;
+            }
+            
+            const driverName = tripEvent.driver_name || "Unknown Driver";
+            const vehicleNumber = tripEvent.vehicle_number || "Unknown";
+            
+            // Format the trip activity 
+            const activityType = tripEvent.type === "trip_started" ? "trip_start" : "safe";
+            const message = tripEvent.type === "trip_started"
+              ? `Driver ${driverName} started trip with vehicle ${vehicleNumber}`
+              : `Driver ${driverName} completed trip with vehicle ${vehicleNumber}${
+                  tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
+                }`;
+                
+            // Update activity data
+            setActivityData(prev => [{
+              id: `trip-${tripEvent.trip_id || Date.now()}`,
+              type: activityType,
+              message,
+              timestamp: new Date(tripEvent.timestamp || new Date()).toLocaleTimeString(),
+              driver_id: tripEvent.driver_id,
+              vehicle_id: tripEvent.vehicle_id,
+            }, ...prev.slice(0, 19)]);
+            
+            // Update metrics if a trip is completed
+            if (tripEvent.type === "trip_ended") {
+              setDashboardData(prev => ({
+                ...prev,
+                totalTrips: prev.totalTrips + 1,
+              }));
+            } else if (tripEvent.type === "trip_started") {
+              // If trip started, increment active trips count
+              setDashboardData(prev => ({
+                ...prev,
+                activeTrips: (prev.activeTrips || 0) + 1,
+              }));
+            }
+            
+            // Add browser notification if supported
+            if ("Notification" in window) {
+              if (Notification.permission === "granted") {
+                new Notification("Trip Update", {
+                  body: message,
+                  icon: "/favicon.ico"
+                });
+              }
+            }
+          } catch (err) {
+            console.error("Error processing trip update:", err);
           }
         });
 
@@ -213,6 +278,11 @@ const Dashboard = () => {
     };
 
     setupSocketConnection();
+    
+    // Request notification permission on component mount
+    if ("Notification" in window && Notification.permission !== "denied") {
+      Notification.requestPermission();
+    }
 
     return () => {
       if (socketRef.current) {
