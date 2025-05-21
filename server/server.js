@@ -33,6 +33,7 @@ const corsOptions = {
       "http://localhost:3000",
       "https://dbms-o3mb.onrender.com",
       "https://dbms-client.onrender.com",
+      "https://dbmsystem.netlify.app"
     ];
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
