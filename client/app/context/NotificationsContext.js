@@ -222,15 +222,36 @@ export const NotificationsProvider = ({ children }) => {
         try {
           console.log("Received new incident notification:", incident);
 
-          // Validate data
-          if (!incident || !incident.incidentNo) {
-            console.error("Invalid incident data received:", incident);
+          // Validate data and normalize field names
+          if (!incident) {
+            console.error("Invalid incident data received: empty incident");
             return;
           }
+          
+          // Normalize the incident number field
+          const incidentNo = incident.incidentNo || incident.incident_no;
+          
+          if (!incidentNo) {
+            console.error("Invalid incident data: no incident number found", incident);
+            return;
+          }
+          
+          // Create normalized incident object to ensure consistent field names
+          const normalizedIncident = {
+            id: incident.id || Date.now(),
+            driverId: incident.driverId || incident.driver_id,
+            driverName: incident.driverName || incident.driver_name || "Unknown Driver",
+            vehicleId: incident.vehicleId || incident.vehicle_id,
+            vehicleNumber: incident.vehicleNumber || incident.vehicle_number || "Unknown Vehicle",
+            incidentNo: incidentNo,
+            timestamp: incident.timestamp || incident.created_at || incident.incident_date || new Date().toISOString(),
+          };
+
+          console.log("Normalized incoming incident:", normalizedIncident);
 
           // Check if we should process this incident
           if (notificationSettings.highPriorityOnly) {
-            const incidentInfo = getIncidentInfo(incident.incidentNo);
+            const incidentInfo = getIncidentInfo(normalizedIncident.incidentNo);
             if (incidentInfo?.severity !== "high") {
               console.log(
                 "Ignoring non-high priority incident due to settings"
@@ -239,7 +260,7 @@ export const NotificationsProvider = ({ children }) => {
             }
           }
 
-          processNewIncident(incident);
+          processNewIncident(normalizedIncident);
         } catch (error) {
           console.error("Error processing incident notification:", error);
         }
@@ -283,16 +304,44 @@ export const NotificationsProvider = ({ children }) => {
   const processNewIncident = (incident) => {
     if (!incident) return;
 
+    console.log("Processing new incident:", incident);
+
+    // Normalize field names to ensure consistency
+    const normalizedIncident = {
+      id: incident.id || Date.now(),
+      driverId: incident.driverId || incident.driver_id,
+      driverName:
+        incident.driverName || incident.driver_name || "Unknown Driver",
+      vehicleId: incident.vehicleId || incident.vehicle_id,
+      vehicleNumber:
+        incident.vehicleNumber || incident.vehicle_number || "Unknown Vehicle",
+      incidentNo: incident.incidentNo || incident.incident_no,
+      timestamp:
+        incident.timestamp ||
+        incident.created_at ||
+        incident.incident_date ||
+        new Date().toISOString(),
+    };
+
+    console.log("Normalized incident data:", normalizedIncident);
+
     // Store incident for display
     setAlertData({
-      ...incident,
+      ...normalizedIncident,
       alertType: "incident",
       alertTitle: "SAFETY ALERT",
     });
     setShowAlert(true);
 
     // Get incident info for additional details
-    const incidentInfo = getIncidentInfo(incident.incidentNo);
+    const incidentInfo = getIncidentInfo(normalizedIncident.incidentNo);
+    if (!incidentInfo) {
+      console.error(
+        `No incident info found for incident number: ${normalizedIncident.incidentNo}`
+      );
+    } else {
+      console.log("Found incident info:", incidentInfo);
+    }
 
     // Select appropriate sound based on severity
     if (notificationSettings.sound) {
@@ -315,16 +364,18 @@ export const NotificationsProvider = ({ children }) => {
     // Add to notification history
     const newNotification = {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      incident: incident,
+      incident: normalizedIncident,
       read: false,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(normalizedIncident.timestamp).toISOString(),
       type: incidentInfo?.type || "UNKNOWN",
       severity: incidentInfo?.severity || "medium",
       alertType: "incident",
-      message: `${incident.driverName || "Driver"}: ${
+      message: `${normalizedIncident.driverName}: ${
         incidentInfo?.message || "Safety incident detected"
       }`,
     };
+
+    console.log("Adding notification to history:", newNotification);
 
     setNotificationHistory((prev) => [newNotification, ...prev].slice(0, 100)); // Keep last 100
     setUnreadCount((prev) => prev + 1);
@@ -332,10 +383,10 @@ export const NotificationsProvider = ({ children }) => {
     // Show desktop notification
     showDesktopNotification({
       title: "SAFETY ALERT!",
-      body: `${incident.driverName || "Driver"}: ${
+      body: `${normalizedIncident.driverName}: ${
         incidentInfo?.message || "Safety incident detected"
       }`,
-      tag: `incident-${incident.id || Date.now()}`,
+      tag: `incident-${normalizedIncident.id}`,
       requireInteraction: true,
       icon: "/favicon.ico",
     });

@@ -159,6 +159,7 @@ const Dashboard = () => {
         socket.on("newIncident", (incident) => {
           try {
             console.log("Received new incident in Dashboard:", incident);
+
             // Validate incident data
             if (!incident) {
               console.error("Received empty incident data");
@@ -197,20 +198,42 @@ const Dashboard = () => {
               vehicleNumber,
               incidentNo,
               timestamp,
+              created_at: incident.created_at || timestamp.toISOString(),
               type: incidentInfo.type.toLowerCase(),
               severity: incidentInfo.severity,
               message: `Driver ${driverName}: ${incidentInfo.message}`,
+              incident_no: incidentNo, // Ensure consistent field naming
             };
 
+            console.log(
+              "Formatted incident for dashboard display:",
+              formattedIncident
+            );
+
             // Update alerts state (add to beginning)
-            setDashboardData((prev) => ({
-              ...prev,
-              alerts: [formattedIncident, ...(prev.alerts?.slice(0, 2) || [])],
-            }));
+            setDashboardData((prev) => {
+              // Create new alerts array with properly formatted incident at the beginning
+              const updatedAlerts = [
+                formattedIncident,
+                ...(prev.alerts?.filter((a) => a.id !== formattedIncident.id) ||
+                  []),
+              ];
+
+              // Only keep the top 20 most recent
+              const trimmedAlerts = updatedAlerts.slice(0, 20);
+
+              console.log("Updated alerts list:", trimmedAlerts.length);
+
+              return {
+                ...prev,
+                alerts: trimmedAlerts,
+              };
+            });
 
             // Update activity data state
-            setActivityData((prev) => [
-              {
+            setActivityData((prev) => {
+              // Create new activity item
+              const newActivity = {
                 id: `incident-${formattedIncident.id}`,
                 type:
                   formattedIncident.severity === "high" ? "danger" : "warning",
@@ -219,9 +242,19 @@ const Dashboard = () => {
                 displayTime: timestamp.toLocaleTimeString(),
                 incident_no: formattedIncident.incidentNo,
                 sortTime: timestamp.getTime(),
-              },
-              ...(prev?.slice(0, 19) || []),
-            ]);
+              };
+
+              // Add at beginning if not already present, filter out duplicates
+              const updatedActivities = [
+                newActivity,
+                ...(prev?.filter((a) => a.id !== newActivity.id) || []),
+              ];
+
+              // Sort all activities by timestamp (newest first) and keep top 20
+              return updatedActivities
+                .sort((a, b) => b.sortTime - a.sortTime)
+                .slice(0, 20);
+            });
 
             // Update metrics
             setMetrics((prev) => ({
@@ -523,7 +556,7 @@ const Dashboard = () => {
         // Set safety recommendation based on most common violation
         setSafetyRecommendation(getRecommendationByType(mostCommonIncidentNo));
 
-        // Process activity data based on real trips and incidents - fixed to properly sort by timestamp
+        // Process activity data based on real trips and incidents
         const activity = processAllActivity(filteredIncidents, filteredTrips);
 
         setDashboardData({
@@ -656,7 +689,7 @@ const Dashboard = () => {
     router.push("/incidents");
   };
 
-  // Process activity data based on real trips and incidents - fixed to properly sort by timestamp
+  // Process activity data based on real trips and incidents
   const processAllActivity = (filteredIncidents, filteredTrips) => {
     try {
       // Create arrays for all activities
@@ -665,6 +698,13 @@ const Dashboard = () => {
       // Use the parameters or fall back to window variables if needed
       const incidents = filteredIncidents || window.filteredIncidents || [];
       const trips = filteredTrips || window.filteredTrips || [];
+
+      console.log(
+        "Processing activities - incidents:",
+        incidents?.length,
+        "trips:",
+        trips?.length
+      );
 
       // Add trip started events
       if (trips && trips.length > 0) {
@@ -723,23 +763,51 @@ const Dashboard = () => {
           .forEach((incident) => {
             // Get incident type info based on incident_no
             const incidentInfo = getIncidentInfo(incident.incident_no);
-            if (!incidentInfo) return;
+            if (!incidentInfo) {
+              console.warn(
+                `No incident info found for incident ${incident.id}, type ${incident.incident_no}`
+              );
+              return;
+            }
 
             // Determine activity type based on severity
             const activityType =
               incidentInfo.severity === "high" ? "danger" : "warning";
-            const incidentTime = new Date(
-              incident.created_at || incident.incident_date || new Date()
-            );
+
+            // Make sure we have a valid date
+            let incidentTime;
+            try {
+              incidentTime = new Date(
+                incident.created_at ||
+                  incident.incident_date ||
+                  incident.timestamp ||
+                  new Date()
+              );
+              // If date is invalid, set to current time
+              if (isNaN(incidentTime)) {
+                console.warn(
+                  `Invalid date for incident ${incident.id}:`,
+                  incident.created_at
+                );
+                incidentTime = new Date();
+              }
+            } catch (e) {
+              console.error("Error parsing incident date:", e);
+              incidentTime = new Date();
+            }
+
+            const displayTime = incidentTime.toLocaleTimeString();
+
+            // Ensure we have a driver name
+            const driverName =
+              incident.driver_name || incident.driverName || "Unknown";
 
             allActivities.push({
               id: `incident-${incident.id || Date.now()}`,
               type: activityType,
-              message: `Driver ${incident.driver_name || "Unknown"}: ${
-                incidentInfo.message
-              }`,
+              message: `Driver ${driverName}: ${incidentInfo.message}`,
               timestamp: incidentTime,
-              displayTime: incidentTime.toLocaleTimeString(),
+              displayTime: displayTime,
               incident_no: incident.incident_no,
               sortTime: incidentTime.getTime(),
             });
@@ -750,10 +818,12 @@ const Dashboard = () => {
       console.log("Total activities before sorting:", allActivities.length);
 
       // Sort all activities by timestamp (newest first)
-      allActivities.sort((a, b) => b.sortTime - a.sortTime);
+      const sortedActivities = allActivities.sort(
+        (a, b) => b.sortTime - a.sortTime
+      );
 
       // Take only the 20 most recent
-      return allActivities.slice(0, 20);
+      return sortedActivities.slice(0, 20);
     } catch (error) {
       console.error("Error processing activities:", error);
       return [];
@@ -1186,10 +1256,10 @@ const Dashboard = () => {
                       </h2>
                     </div>
                   </div>
-                  <div className="relative p-6">
+                  <div className="relative p-6 h-[calc(600px-56px)]">
                     <div className="absolute left-11 top-6 h-[calc(100%-48px)] w-0.5 bg-gray-200 dark:bg-gray-700"></div>
                     <div
-                      className="space-y-6 max-h-[400px] overflow-y-auto pr-2"
+                      className="space-y-6 max-h-[530px] overflow-y-auto pr-2"
                       style={{
                         scrollbarWidth: "thin",
                         scrollbarColor: "#CBD5E0 #EDF2F7",
