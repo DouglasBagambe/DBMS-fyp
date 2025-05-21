@@ -98,11 +98,13 @@ const Dashboard = () => {
         const { io } = await import("socket.io-client");
 
         const socket = io(API_URL, {
-          transports: ["websocket"],
+          transports: ["websocket", "polling"], // Try websocket first, fall back to polling
           withCredentials: true,
-          reconnectionAttempts: 5,
+          reconnectionAttempts: 10, // Increased attempts
           reconnectionDelay: 1000,
-          timeout: 10000,
+          timeout: 20000, // Increased timeout
+          autoConnect: true,
+          forceNew: true, // Force a new connection
         });
 
         socketRef.current = socket;
@@ -111,16 +113,83 @@ const Dashboard = () => {
         socket.on("connect", () => {
           console.log("Socket connected for Dashboard!");
           setSocketStatus("connected");
+
+          // Send a ping to the server to keep the connection alive
+          const pingInterval = setInterval(() => {
+            if (socket.connected) {
+              socket.emit("ping", { timestamp: new Date().toISOString() });
+            } else {
+              clearInterval(pingInterval);
+            }
+          }, 30000); // Ping every 30 seconds
+
+          // Clear interval on disconnect
+          socket.on("disconnect", () => {
+            clearInterval(pingInterval);
+          });
         });
 
         socket.on("disconnect", () => {
           console.log("Socket disconnected!");
           setSocketStatus("disconnected");
+
+          // Attempt to reconnect after a short delay
+          setTimeout(() => {
+            if (socketRef.current && !socketRef.current.connected) {
+              console.log("Attempting to reconnect...");
+              socketRef.current.connect();
+            }
+          }, 3000);
         });
 
         socket.on("connect_error", (err) => {
           console.error("Socket connection error:", err);
           setSocketStatus("error");
+
+          // Attempt to reconnect with a different transport
+          setTimeout(() => {
+            if (socketRef.current) {
+              console.log(
+                "Attempting to reconnect with different transport..."
+              );
+              socketRef.current.io.opts.transports = ["polling", "websocket"];
+              socketRef.current.connect();
+            }
+          }, 5000);
+        });
+
+        socket.on("reconnect_attempt", (attemptNumber) => {
+          console.log(`Socket reconnection attempt ${attemptNumber}`);
+          setSocketStatus("connecting");
+        });
+
+        socket.on("reconnect", () => {
+          console.log("Socket reconnected successfully!");
+          setSocketStatus("connected");
+        });
+
+        socket.on("reconnect_error", (err) => {
+          console.error("Socket reconnection error:", err);
+          setSocketStatus("error");
+        });
+
+        socket.on("reconnect_failed", () => {
+          console.error("Socket reconnection failed");
+          setSocketStatus("error");
+
+          // Final attempt with completely new connection
+          setTimeout(() => {
+            if (socketRef.current) {
+              socketRef.current.disconnect();
+              setupSocketConnection(); // Recursive call to try setup again
+            }
+          }, 10000);
+        });
+
+        // Server pong response handler
+        socket.on("pong", (data) => {
+          console.log("Received pong from server:", data);
+          // Connection is alive
         });
 
         // Enhanced listener for new incidents in real-time with better error handling
@@ -132,15 +201,15 @@ const Dashboard = () => {
               console.error("Received empty incident data");
               return;
             }
-            
+
             // Get incident number, properly handling different field names
             const incidentNo = incident.incidentNo || incident.incident_no;
-            
+
             if (!incidentNo) {
               console.error("Invalid incident number", incident);
               return;
             }
-            
+
             // Get incident type info
             const incidentInfo = getIncidentInfo(incidentNo);
             if (!incidentInfo) {
@@ -149,9 +218,11 @@ const Dashboard = () => {
             }
 
             // Format the incident for display
-            const driverName = incident.driverName || incident.driver_name || "Unknown Driver";
-            const vehicleNumber = incident.vehicleNumber || incident.vehicle_number || "Unknown";
-            
+            const driverName =
+              incident.driverName || incident.driver_name || "Unknown Driver";
+            const vehicleNumber =
+              incident.vehicleNumber || incident.vehicle_number || "Unknown";
+
             const formattedIncident = {
               id: incident.id || Date.now(),
               driverId: incident.driverId || incident.driver_id,
@@ -159,50 +230,101 @@ const Dashboard = () => {
               vehicleId: incident.vehicleId || incident.vehicle_id,
               vehicleNumber,
               incidentNo,
-              timestamp: incident.timestamp || incident.created_at || new Date().toISOString(),
+              timestamp:
+                incident.timestamp ||
+                incident.created_at ||
+                new Date().toISOString(),
               type: incidentInfo.type.toLowerCase(),
               severity: incidentInfo.severity,
               message: `Driver ${driverName}: ${incidentInfo.message}`,
             };
-            
+
             // Update alerts state (add to beginning)
-            setDashboardData(prev => ({
+            setDashboardData((prev) => ({
               ...prev,
-              alerts: [formattedIncident, ...prev.alerts.slice(0, 2)]
+              alerts: [
+                formattedIncident,
+                ...(prev.alerts ? prev.alerts.slice(0, 2) : []),
+              ],
             }));
-            
-            // Update activity data state 
-            setActivityData(prev => [{
-              id: `incident-${formattedIncident.id}`,
-              type: formattedIncident.severity === "high" ? "danger" : "warning",
-              message: formattedIncident.message,
-              timestamp: new Date(formattedIncident.timestamp).toLocaleTimeString(),
-              incident_no: formattedIncident.incidentNo,
-            }, ...prev.slice(0, 19)]);
-            
+
+            // Update activity data state
+            setActivityData((prev) => [
+              {
+                id: `incident-${formattedIncident.id}`,
+                type:
+                  formattedIncident.severity === "high" ? "danger" : "warning",
+                message: formattedIncident.message,
+                timestamp: new Date(
+                  formattedIncident.timestamp
+                ).toLocaleTimeString(),
+                incident_no: formattedIncident.incidentNo,
+              },
+              ...(prev || []).slice(0, 19),
+            ]);
+
             // Update metrics
-            setMetrics(prev => ({
+            setMetrics((prev) => ({
               ...prev,
-              recentIncidents: prev.recentIncidents + 1
+              recentIncidents: (prev.recentIncidents || 0) + 1,
             }));
-            
-            // Add browser notification if supported
+
+            // Immediately show browser notification
             if ("Notification" in window) {
+              // Always attempt to show notification
               if (Notification.permission === "granted") {
-                new Notification("Driver Safety Alert", {
-                  body: formattedIncident.message,
-                  icon: "/favicon.ico"
-                });
+                // Use setTimeout to ensure notification is shown immediately
+                setTimeout(() => {
+                  try {
+                    const notification = new Notification(
+                      "⚠️ Driver Safety Alert",
+                      {
+                        body: formattedIncident.message,
+                        icon: "/favicon.ico",
+                        tag: `incident-${formattedIncident.id}`, // Prevent duplicate notifications
+                        requireInteraction: true, // Keep notification until user interacts with it
+                      }
+                    );
+
+                    notification.onclick = () => {
+                      window.focus();
+                      notification.close();
+                    };
+                  } catch (err) {
+                    console.error("Error showing notification:", err);
+                  }
+                }, 0);
               } else if (Notification.permission !== "denied") {
-                Notification.requestPermission().then(permission => {
+                Notification.requestPermission().then((permission) => {
                   if (permission === "granted") {
-                    new Notification("Driver Safety Alert", {
-                      body: formattedIncident.message,
-                      icon: "/favicon.ico"
-                    });
+                    // Show notification immediately after permission granted
+                    const notification = new Notification(
+                      "⚠️ Driver Safety Alert",
+                      {
+                        body: formattedIncident.message,
+                        icon: "/favicon.ico",
+                        tag: `incident-${formattedIncident.id}`,
+                        requireInteraction: true,
+                      }
+                    );
+
+                    notification.onclick = () => {
+                      window.focus();
+                      notification.close();
+                    };
                   }
                 });
               }
+            }
+
+            // Play an alert sound
+            try {
+              const audio = new Audio("/alert.mp3"); // Make sure to add this file to your public folder
+              audio
+                .play()
+                .catch((err) => console.log("Audio play error:", err));
+            } catch (err) {
+              console.log("Audio error:", err);
             }
           } catch (err) {
             console.error("Error processing new incident:", err);
@@ -218,56 +340,97 @@ const Dashboard = () => {
               console.error("Received empty trip data");
               return;
             }
-            
-            const driverName = tripEvent.driver_name || "Unknown Driver";
-            const vehicleNumber = tripEvent.vehicle_number || "Unknown";
-            
-            // Format the trip activity 
-            const activityType = tripEvent.type === "trip_started" ? "trip_start" : "safe";
-            const message = tripEvent.type === "trip_started"
-              ? `Driver ${driverName} started trip with vehicle ${vehicleNumber}`
-              : `Driver ${driverName} completed trip with vehicle ${vehicleNumber}${
-                  tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
-                }`;
-                
-            // Update activity data
-            setActivityData(prev => [{
-              id: `trip-${tripEvent.trip_id || Date.now()}`,
-              type: activityType,
-              message,
-              timestamp: new Date(tripEvent.timestamp || new Date()).toLocaleTimeString(),
-              driver_id: tripEvent.driver_id,
-              vehicle_id: tripEvent.vehicle_id,
-            }, ...prev.slice(0, 19)]);
-            
+
+            const driverName =
+              tripEvent.driver_name || tripEvent.driverName || "Unknown Driver";
+            const vehicleNumber =
+              tripEvent.vehicle_number || tripEvent.vehicleNumber || "Unknown";
+
+            // Format the trip activity
+            const activityType =
+              tripEvent.type === "trip_started" ? "trip_start" : "safe";
+            const message =
+              tripEvent.type === "trip_started"
+                ? `Driver ${driverName} started trip with vehicle ${vehicleNumber}`
+                : `Driver ${driverName} completed trip with vehicle ${vehicleNumber}${
+                    tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
+                  }`;
+
+            // Update activity data - handle null prev state
+            setActivityData((prev) => [
+              {
+                id: `trip-${tripEvent.trip_id || Date.now()}`,
+                type: activityType,
+                message,
+                timestamp: new Date(
+                  tripEvent.timestamp || new Date()
+                ).toLocaleTimeString(),
+                driver_id: tripEvent.driver_id || tripEvent.driverId,
+                vehicle_id: tripEvent.vehicle_id || tripEvent.vehicleId,
+              },
+              ...(prev || []).slice(0, 19),
+            ]);
+
             // Update metrics if a trip is completed
             if (tripEvent.type === "trip_ended") {
-              setDashboardData(prev => ({
+              setDashboardData((prev) => ({
                 ...prev,
-                totalTrips: prev.totalTrips + 1,
+                totalTrips: (prev.totalTrips || 0) + 1,
               }));
             } else if (tripEvent.type === "trip_started") {
               // If trip started, increment active trips count
-              setDashboardData(prev => ({
+              setDashboardData((prev) => ({
                 ...prev,
                 activeTrips: (prev.activeTrips || 0) + 1,
+                tripsToday: (prev.tripsToday || 0) + 1,
               }));
             }
-            
-            // Add browser notification if supported
+
+            // Immediately show browser notification with proper icon
+            // Request notification permission on component mount
             if ("Notification" in window) {
-              if (Notification.permission === "granted") {
-                new Notification("Trip Update", {
-                  body: message,
-                  icon: "/favicon.ico"
+              if (
+                Notification.permission !== "granted" &&
+                Notification.permission !== "denied"
+              ) {
+                // Request permission on component mount
+                Notification.requestPermission().then((permission) => {
+                  console.log("Notification permission:", permission);
+                  if (permission === "granted") {
+                    // Send a test notification to confirm it works
+                    setTimeout(() => {
+                      const notification = new Notification(
+                        "Driver Safety System",
+                        {
+                          body: "Real-time safety alerts are now enabled",
+                          icon: "/favicon.ico",
+                        }
+                      );
+
+                      notification.onclick = () => {
+                        window.focus();
+                        notification.close();
+                      };
+                    }, 1000);
+                  }
                 });
               }
+            }
+
+            // Play a notification sound for trips
+            try {
+              const audio = new Audio("/notification.mp3"); // Add this file to your public folder
+              audio.volume = 0.7; // Lower volume for trip notifications
+              audio
+                .play()
+                .catch((err) => console.log("Audio play error:", err));
+            } catch (err) {
+              console.log("Audio error:", err);
             }
           } catch (err) {
             console.error("Error processing trip update:", err);
           }
         });
-
         return () => {
           socket.disconnect();
         };
@@ -278,7 +441,7 @@ const Dashboard = () => {
     };
 
     setupSocketConnection();
-    
+
     // Request notification permission on component mount
     if ("Notification" in window && Notification.permission !== "denied") {
       Notification.requestPermission();
@@ -311,48 +474,64 @@ const Dashboard = () => {
         const allTrips = await getAllTrips();
 
         // Filter incidents by date range if provided
+        // Filter incidents by date range if provided
         const filteredIncidents =
-          incidents?.filter((incident) => {
-            if (!startDate || !endDate) return true;
+          incidents && Array.isArray(incidents)
+            ? incidents.filter((incident) => {
+                if (!startDate || !endDate || !incident) return false;
 
-            const incidentDate = incident.incident_date || incident.created_at;
-            if (!incidentDate) return true;
+                const incidentDate =
+                  incident.incident_date || incident.created_at;
+                if (!incidentDate) return false;
 
-            const date = new Date(incidentDate);
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999); // Include the entire end day
+                const date = new Date(incidentDate);
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999); // Include the entire end day
 
-            return date >= start && date <= end;
-          }) || [];
+                return date >= start && date <= end;
+              })
+            : [];
 
         // Count total and active drivers
-        const totalDrivers = drivers.drivers.length;
-        const activeDrivers = drivers.drivers.filter(
-          (driver) => driver.vehicle && driver.vehicle !== "None"
-        ).length;
+        const totalDrivers =
+          drivers && drivers.drivers ? drivers.drivers.length : 0;
+        const activeDrivers =
+          drivers && drivers.drivers
+            ? drivers.drivers.filter(
+                (driver) =>
+                  driver && driver.vehicle && driver.vehicle !== "None"
+              ).length
+            : 0;
 
         // Get total trips from the trip data (completed trips in date range)
-        const totalTrips = tripCounts.total_trips || 0;
+        const totalTrips =
+          tripCounts && tripCounts.total_trips ? tripCounts.total_trips : 0;
 
         // Filter trips by date range
-        const filteredTrips = allTrips.trips
-          ? allTrips.trips.filter((trip) => {
-              if (!startDate || !endDate) return true;
+        const filteredTrips =
+          allTrips && allTrips.trips
+            ? allTrips.trips.filter((trip) => {
+                if (!startDate || !endDate || !trip || !trip.start_time)
+                  return false;
 
-              const tripDate = new Date(trip.start_time);
-              const start = new Date(startDate);
-              const end = new Date(endDate);
-              end.setHours(23, 59, 59, 999);
+                const tripDate = new Date(trip.start_time);
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
 
-              return tripDate >= start && tripDate <= end;
-            })
-          : [];
+                return tripDate >= start && tripDate <= end;
+              })
+            : [];
 
         // Use the safety score calculation utility
-        const safetyScoreData = calculateSafetyScore(filteredIncidents, filteredTrips, {
-          timeWindow: 30, // Consider incidents from the last 30 days
-        });
+        const safetyScoreData = calculateSafetyScore(
+          filteredIncidents,
+          filteredTrips,
+          {
+            timeWindow: 30, // Consider incidents from the last 30 days
+          }
+        );
 
         // Get the calculated safety score
         const averageScore = safetyScoreData.score;
@@ -381,7 +560,12 @@ const Dashboard = () => {
           // Filter incidents with valid incident_no values (1-4)
           const validIncidents = filteredIncidents.filter(
             (incident) =>
-              incident.incident_no && getIncidentInfo(incident.incident_no)
+              incident &&
+              incident.incident_no &&
+              typeof incident.incident_no === "number" &&
+              incident.incident_no >= 1 &&
+              incident.incident_no <= 4 &&
+              getIncidentInfo(incident.incident_no)
           );
 
           // Count incidents by type
@@ -398,6 +582,10 @@ const Dashboard = () => {
           alerts = validIncidents.slice(0, 3).map((incident, index) => {
             // Get incident type info based on incident_no
             const incidentInfo = getIncidentInfo(incident.incident_no);
+
+            // Ensure driver name and vehicle number are available
+            const driverName = incident.driver_name || "Unknown Driver";
+            const vehicleNumber = incident.vehicle_number || "Unknown Vehicle";
 
             return {
               id: index + 1,
@@ -632,13 +820,15 @@ const Dashboard = () => {
           </div>
           {/* Socket Status */}
           <div className="flex justify-end items-center text-sm mb-4">
-            <div className={`flex items-center ${
-              socketStatus === "connected" 
-                ? "text-green-500" 
-                : socketStatus === "connecting" 
-                  ? "text-amber-500 animate-pulse" 
+            <div
+              className={`flex items-center ${
+                socketStatus === "connected"
+                  ? "text-green-500"
+                  : socketStatus === "connecting"
+                  ? "text-amber-500 animate-pulse"
                   : "text-red-500"
-            }`}>
+              }`}
+            >
               {socketStatus === "connected" ? (
                 <Wifi className="w-4 h-4 mr-1" />
               ) : socketStatus === "connecting" ? (
@@ -658,8 +848,45 @@ const Dashboard = () => {
               <button
                 onClick={() => {
                   if (socketRef.current) {
+                    socketRef.current.disconnect();
                     socketRef.current.connect();
                     setSocketStatus("connecting");
+                  } else {
+                    // If socket reference is missing, set up a new one
+                    const setupSocketConnection = async () => {
+                      try {
+                        setSocketStatus("connecting");
+                        const API_URL =
+                          process.env.NEXT_PUBLIC_API_URL ||
+                          "https://dbms-o3mb.onrender.com";
+
+                        const { io } = await import("socket.io-client");
+
+                        const socket = io(API_URL, {
+                          transports: ["websocket", "polling"],
+                          withCredentials: true,
+                          reconnectionAttempts: 10,
+                          reconnectionDelay: 1000,
+                          timeout: 20000,
+                          forceNew: true,
+                        });
+
+                        socketRef.current = socket;
+
+                        // Re-attach all event handlers
+                        socket.on("connect", () => {
+                          console.log("Socket reconnected!");
+                          setSocketStatus("connected");
+                        });
+
+                        // Re-attach other handlers...
+                      } catch (err) {
+                        console.error("Error reconnecting socket:", err);
+                        setSocketStatus("error");
+                      }
+                    };
+
+                    setupSocketConnection();
                   }
                 }}
                 className="ml-2 px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
