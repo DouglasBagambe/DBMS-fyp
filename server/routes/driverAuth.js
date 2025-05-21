@@ -228,6 +228,44 @@ router.post("/log-incident", authenticateToken, async (req, res) => {
       );
     }
 
+    // Get driver and vehicle information for the socket event
+    const driverInfo = await pool.query(
+      "SELECT name FROM drivers WHERE id = $1",
+      [driverId]
+    );
+
+    const vehicleInfo = await pool.query(
+      "SELECT vehicle_number FROM vehicles WHERE id = $1",
+      [vehicleId]
+    );
+
+    const driverName = driverInfo.rows[0]?.name || "Unknown Driver";
+    const vehicleNumber =
+      vehicleInfo.rows[0]?.vehicle_number || "Unknown Vehicle";
+
+    // Get the Socket.io instance
+    const io = req.app.get("io");
+
+    // Create incident object for real-time notification
+    const incidentAlert = {
+      id: result.rows[0].id,
+      driver_id: driverId,
+      driver_name: driverName,
+      vehicle_id: vehicleId,
+      vehicle_number: vehicleNumber,
+      incident_type: type,
+      incident_no: incidentNo,
+      timestamp: result.rows[0].created_at || result.rows[0].incident_date,
+      severity: severityNum || 1,
+      description: details || "",
+      type: "safety_incident",
+      message: `Driver ${driverName} had a ${type} incident in vehicle ${vehicleNumber}`,
+    };
+
+    // Emit the incident alert to all connected clients
+    io.emit("newIncident", incidentAlert);
+    console.log("Emitted new incident alert:", incidentAlert);
+
     console.log("Incident logged successfully:", result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (error) {
