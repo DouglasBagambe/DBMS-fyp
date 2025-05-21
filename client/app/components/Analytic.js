@@ -1586,55 +1586,67 @@ const Analytics = () => {
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              {/* Bar Chart */}
-<div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
-  {analytics && analytics.incidentsByVehicle && analytics.incidentsByVehicle.length > 0 ? (
-    <Bar
-      data={{
-        labels: analytics.incidentsByVehicle.map(item => `Vehicle ${item.vehicleNumber}`),
-        datasets: [
-          {
-            label: "Incidents",
-            data: analytics.incidentsByVehicle.map(item => item.incidents),
-            backgroundColor: "rgb(59, 130, 246)",
-            borderColor: "rgb(37, 99, 235)",
-            borderWidth: 1,
-          }
-        ]
-      }}
-      options={{
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false
-          },
-          title: {
-            display: true,
-            text: "Incidents by Vehicle",
-            font: {
-              size: 16
-            }
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              stepSize: 1
-            }
-          }
-        }
-      }}
-    />
-  ) : (
-    <div className="h-full flex items-center justify-center">
-      <p className="text-gray-500 dark:text-gray-400">
-        No incident data available
-      </p>
-    </div>
-  )}
-</div>
+              {/* Bar Chart - Replacing with Line Graph */}
+              <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
+                {analytics &&
+                analytics.incidentsByVehicle &&
+                analytics.incidentsByVehicle.length > 0 ? (
+                  <Line
+                    data={{
+                      labels: analytics.incidentsByVehicle.map(
+                        (item) => item.vehicleNumber
+                      ),
+                      datasets: [
+                        {
+                          label: "Safety Incidents",
+                          data: analytics.incidentsByVehicle.map(
+                            (item) => item.incidents
+                          ),
+                          borderColor: "rgb(59, 130, 246)",
+                          backgroundColor: "rgba(59, 130, 246, 0.1)",
+                          tension: 0.3,
+                          fill: true,
+                          pointBackgroundColor: "rgb(37, 99, 235)",
+                          pointBorderColor: "#fff",
+                          pointBorderWidth: 2,
+                          pointRadius: 4,
+                        },
+                      ],
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          display: false,
+                        },
+                        title: {
+                          display: true,
+                          text: "Incidents by Vehicle",
+                          font: {
+                            size: 16,
+                          },
+                        },
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          ticks: {
+                            precision: 0,
+                            stepSize: 1,
+                          },
+                        },
+                      },
+                    }}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center">
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No incident data available
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Pie Chart */}
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
