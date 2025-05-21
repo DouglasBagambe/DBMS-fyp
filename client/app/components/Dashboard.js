@@ -107,6 +107,232 @@ const Dashboard = () => {
 
   // Setup socket connection and browser notifications
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+
+    // Request notification permission
+    const requestNotificationPermission = async () => {
+      if (!("Notification" in window)) {
+        console.log("This browser does not support desktop notifications");
+        return false;
+      }
+      
+      if (Notification.permission === "granted") {
+        setNotificationsEnabled(true);
+        return true;
+      }
+      
+      if (Notification.permission !== "denied") {
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          setNotificationsEnabled(true);
+          return true;
+        }
+      }
+      
+      return false;
+    };
+
+    // Request permission when component mounts
+    requestNotificationPermission();
+    
+    // Connect to Socket.io server
+    const API_URL =
+      process.env.NEXT_PUBLIC_API_URL || "https://dbms-o3mb.onrender.com";
+    
+    // Dynamically import socket.io-client only on the client side
+    import('socket.io-client').then(({ io }) => {
+      const socket = io(API_URL, {
+        transports: ["websocket"],
+        withCredentials: true,
+      });
+      
+      socketRef.current = socket;
+      
+      // Listen for new incidents
+      socket.on("newIncident", (incident) => {
+        console.log("Dashboard received new incident:", incident);
+        
+        // Create a new browser notification if enabled
+        if (notificationsEnabled) {
+          const incidentInfo = getIncidentTypeInfo(incident.incidentNo);
+          const severity = incidentInfo?.severity || "medium";
+          
+          try {
+            const notification = new Notification("Fleet Safety Alert", {
+              body: `${incident.driverName}: ${
+                incidentInfo ? incidentInfo.message : "Safety violation detected"
+              }`,
+              icon: "/logo.png", // Add your logo path here
+              tag: "safety-alert",
+              vibrate: [200, 100, 200],
+            });
+            
+            // Click on notification to open dashboard
+            notification.onclick = () => {
+              window.focus();
+              notification.close();
+            };
+            
+            // Auto close after 10 seconds
+            setTimeout(() => notification.close(), 10000);
+          } catch (error) {
+            console.error("Error showing notification:", error);
+          }
+        }
+        
+        // Set the alert data
+        setAlertIncident(incident);
+        setShowAlert(true);
+        
+        // Update metrics and alerts
+        setMetrics((prev) => ({
+          ...prev,
+          recentIncidents: prev.recentIncidents + 1,
+        }));
+        
+        // Format the incident for dashboard alerts
+        const newAlert = {
+          id: Date.now(),
+          message: `Driver ${incident.driverName}: ${
+            getIncidentTypeInfo(incident.incidentNo)?.message ||
+            "Safety violation detected"
+          }`,
+          timestamp: new Date(incident.timestamp).toLocaleTimeString(),
+          severity:
+            getIncidentTypeInfo(incident.incidentNo)?.severity || "medium",
+          driverId: incident.driverId,
+          vehicleId: incident.vehicleId,
+          type:
+            getIncidentTypeInfo(incident.incidentNo)?.type.toLowerCase() ||
+            "unknown",
+          incident_no: incident.incidentNo,
+        };
+        
+        // Update dashboard data with new alert
+        setDashboardData((prevData) => ({
+          ...prevData,
+          alerts: [newAlert, ...prevData.alerts.slice(0, 2)], // Keep only the 3 most recent alerts
+        }));
+        
+        // Auto-hide the alert after 10 seconds
+        setTimeout(() => {
+          setShowAlert(false);
+        }, 10000);
+      });
+      
+      // Clean up socket connection on unmount
+      return () => {
+        socket.disconnect();
+/* eslint-disable react-hooks/exhaustive-deps */
+// src/components/Dashboard.js
+
+"use client";
+import React, { useState, useEffect, useContext, useRef } from "react";
+import { Link } from "react-router-dom";
+import { AuthContext } from "../context/AuthContext";
+import {
+  Bell,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  Eye,
+  XCircle,
+  Activity,
+  ArrowRight,
+  Car,
+  UserCircle,
+  Phone,
+  Moon,
+  Cigarette,
+  AlertTriangle as BeltIcon,
+  Info,
+  Calendar,
+  Shield,
+} from "lucide-react";
+import {
+  getDashboardMetrics,
+  getDrivers,
+  getVehicles,
+  getIncidents,
+  getLatestIncident,
+} from "../utils/api";
+import { useRouter } from "next/navigation";
+import { io } from "socket.io-client";
+
+const Dashboard = () => {
+  const { user } = useContext(AuthContext);
+  const [dashboardData, setDashboardData] = useState({
+    totalTrips: 0,
+    safeDrivingPercentage: 0,
+    averageScore: 0,
+    alerts: [],
+  });
+  const [metrics, setMetrics] = useState({
+    activeDrivers: 0,
+    totalDrivers: 0,
+    totalVehicles: 0,
+    recentIncidents: 0,
+  });
+  const [activityData, setActivityData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [safetyRecommendation, setSafetyRecommendation] = useState({
+    title: "",
+    description: "",
+    incidentNo: 3, // Default to seatbelt
+  });
+  // Add real-time alert states
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertIncident, setAlertIncident] = useState(null);
+  const socketRef = useRef(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+  // Date filter state
+  const [startDate, setStartDate] = useState(() => {
+    // Default to 7 days ago
+    const date = new Date();
+    date.setDate(date.getDate() - 7);
+    return date.toISOString().split("T")[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    // Default to today
+    return new Date().toISOString().split("T")[0];
+  });
+
+  const router = useRouter();
+
+  // Map incident numbers to their respective types and messages
+  const incidentTypeMap = {
+    1: {
+      type: "PHONE_USAGE",
+      message: "Phone usage detected",
+      severity: "high",
+    },
+    2: {
+      type: "CIGARETTE",
+      message: "Cigarette usage detected",
+      severity: "medium",
+    },
+    3: {
+      type: "SEATBELT",
+      message: "Seatbelt violation detected",
+      severity: "medium",
+    },
+    4: {
+      type: "DROWSINESS",
+      message: "Driver drowsiness detected",
+      severity: "high",
+    },
+  };
+
+  // Get incident type info based on incident_no
+  const getIncidentTypeInfo = (incidentNo) => {
+    return incidentTypeMap[incidentNo] || null;
+  };
+
+  // Setup socket connection and browser notifications
+  useEffect(() => {
     // Request notification permission
     const requestNotificationPermission = async () => {
       if (!("Notification" in window)) {

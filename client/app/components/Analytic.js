@@ -28,7 +28,6 @@ import {
   getLatestIncident,
 } from "../utils/api";
 import { useRouter } from "next/navigation";
-import { io } from "socket.io-client";
 
 // Import Chart.js modules
 import {
@@ -190,85 +189,99 @@ const Analytics = () => {
 
   // Connect to Socket.io server
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === "undefined") return;
+
     // Get API URL from environment or default to production URL
     const API_URL =
       process.env.NEXT_PUBLIC_API_URL || "https://dbms-o3mb.onrender.com";
 
-    // Connect to the Socket.io server
-    const socket = io(API_URL, {
-      transports: ["websocket"],
-      withCredentials: true,
-    });
+    // Dynamically import socket.io-client only on the client side
+    import("socket.io-client")
+      .then(({ io }) => {
+        const socket = io(API_URL, {
+          transports: ["websocket"],
+          withCredentials: true,
+        });
 
-    socketRef.current = socket;
+        socketRef.current = socket;
 
-    // Listen for new incidents
-    socket.on("newIncident", (incident) => {
-      console.log("Received new incident:", incident);
+        // Listen for new incidents
+        socket.on("newIncident", (incident) => {
+          console.log("Received new incident:", incident);
 
-      // Set the alert data
-      setAlertIncident(incident);
-      setShowAlert(true);
+          // Set the alert data
+          setAlertIncident(incident);
+          setShowAlert(true);
 
-      // Update the incident timeline with the new incident
-      setAnalytics((prevAnalytics) => {
-        // Format the incident for display
-        const formattedIncident = {
-          id: incident.id,
-          driverId: incident.driverId,
-          driverName: incident.driverName,
-          vehicleNumber: incident.vehicleNumber,
-          incidentNo: incident.incidentNo,
-          type: getIncidentTypeInfo(incident.incidentNo)?.type || "UNKNOWN",
-          timestamp: incident.timestamp,
-          formattedTime: new Date(incident.timestamp).toLocaleString(),
-          severity: getIncidentSeverity(incident.incidentNo),
-          message: `${incident.driverName}: ${getIncidentMessage(
-            incident.incidentNo
-          )}`,
+          // Update the incident timeline with the new incident
+          setAnalytics((prevAnalytics) => {
+            // Format the incident for display
+            const formattedIncident = {
+              id: incident.id,
+              driverId: incident.driverId,
+              driverName: incident.driverName,
+              vehicleNumber: incident.vehicleNumber,
+              incidentNo: incident.incidentNo,
+              type: getIncidentTypeInfo(incident.incidentNo)?.type || "UNKNOWN",
+              timestamp: incident.timestamp,
+              formattedTime: new Date(incident.timestamp).toLocaleString(),
+              severity: getIncidentSeverity(incident.incidentNo),
+              message: `${incident.driverName}: ${getIncidentMessage(
+                incident.incidentNo
+              )}`,
+            };
+
+            // Add to timeline and keep only the 5 most recent
+            const updatedTimeline = [
+              formattedIncident,
+              ...prevAnalytics.incidentTimeline.slice(0, 4),
+            ];
+
+            // Update incident counts
+            const updatedIncidents = { ...prevAnalytics.incidents };
+            switch (Number(incident.incidentNo)) {
+              case 1: // Phone usage
+                updatedIncidents.phoneUsage++;
+                break;
+              case 2: // Cigarette
+                updatedIncidents.cigarette++;
+                break;
+              case 3: // Seatbelt
+                updatedIncidents.seatbelt++;
+                break;
+              case 4: // Drowsiness
+                updatedIncidents.drowsiness++;
+                break;
+            }
+
+            return {
+              ...prevAnalytics,
+              incidents: updatedIncidents,
+              incidentTimeline: updatedTimeline,
+            };
+          });
+
+          // Update metrics count
+          setMetrics((prevMetrics) => ({
+            ...prevMetrics,
+            incidentCount: prevMetrics.incidentCount + 1,
+          }));
+
+          // Auto-hide the alert after 10 seconds
+          setTimeout(() => {
+            setShowAlert(false);
+          }, 10000);
+        });
+
+        // Return cleanup function
+        return () => {
+          socket.disconnect();
         };
-
-        // Add to timeline and keep only the 5 most recent
-        const updatedTimeline = [
-          formattedIncident,
-          ...prevAnalytics.incidentTimeline.slice(0, 4),
-        ];
-
-        // Update incident counts
-        const updatedIncidents = { ...prevAnalytics.incidents };
-        switch (Number(incident.incidentNo)) {
-          case 1: // Phone usage
-            updatedIncidents.phoneUsage++;
-            break;
-          case 2: // Cigarette
-            updatedIncidents.cigarette++;
-            break;
-          case 3: // Seatbelt
-            updatedIncidents.seatbelt++;
-            break;
-          case 4: // Drowsiness
-            updatedIncidents.drowsiness++;
-            break;
-        }
-
-        return {
-          ...prevAnalytics,
-          incidents: updatedIncidents,
-          incidentTimeline: updatedTimeline,
-        };
+      })
+      .catch((err) => {
+        console.error("Failed to load socket.io client:", err);
       });
-
-      // Update metrics count
-      setMetrics((prevMetrics) => ({
-        ...prevMetrics,
-        incidentCount: prevMetrics.incidentCount + 1,
-      }));
-
-      // Auto-hide the alert after 10 seconds
-      setTimeout(() => {
-        setShowAlert(false);
-      }, 10000);
-    });
 
     // Fetch latest incident on initial load to display any recent alerts
     const fetchLatestIncident = async () => {
@@ -296,11 +309,6 @@ const Analytics = () => {
     };
 
     fetchLatestIncident();
-
-    // Clean up socket connection on unmount
-    return () => {
-      socket.disconnect();
-    };
   }, []);
 
   // Close alert manually

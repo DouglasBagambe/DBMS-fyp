@@ -2,6 +2,9 @@
 import DriverDetails from "../components/DriverDetails";
 import { useSearchParams } from "next/navigation";
 
+// Add dynamic rendering with no static prerendering
+export const dynamic = 'force-dynamic';
+
 export default function DriverDetailsPage() {
   const searchParams = useSearchParams();
   const driverId = searchParams.get("driverId");
