@@ -10,8 +10,8 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Chatbot from "./components/Chatbot";
 
-// Add dynamic rendering with no static prerendering
-export const dynamic = 'force-dynamic';
+// Set static rendering for Netlify compatibility
+export const dynamic = "force-static";
 
 // Custom layout component that conditionally renders header and footer
 const AppLayout = () => {

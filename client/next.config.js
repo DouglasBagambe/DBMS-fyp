@@ -13,9 +13,13 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   typescript: {
-    // Don't run TypeScript checking during build for faster builds
+    // Don't run TypeScript checking during build
     ignoreBuildErrors: true,
   },
+  // Add trailingSlash to improve static export compatibility
+  trailingSlash: true,
+  // Note: removed skipTypeCheck (invalid option)
+  // Note: removed experimental.staticPageGenerationTimeout (invalid option)
 };
 
 module.exports = nextConfig;

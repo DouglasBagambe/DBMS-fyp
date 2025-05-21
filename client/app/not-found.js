@@ -1,9 +1,13 @@
+/* eslint-disable react/no-unescaped-entities */
 // app/not-found.js
 
 "use client";
 
 import React from "react";
 import Link from "next/link";
+
+// Set static rendering for this page
+export const dynamic = "force-static";
 
 export default function NotFound() {
   return (

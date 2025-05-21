@@ -2,8 +2,8 @@
 import DriverDetails from "../components/DriverDetails";
 import { useSearchParams } from "next/navigation";
 
-// Add dynamic rendering with no static prerendering
-export const dynamic = 'force-dynamic';
+// Changed from 'static' to 'force-static' for Next.js 15.3.2 compatibility
+export const dynamic = "force-static";
 
 export default function DriverDetailsPage() {
   const searchParams = useSearchParams();
@@ -13,11 +13,13 @@ export default function DriverDetailsPage() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-md">
-          <p className="text-red-700 dark:text-red-400">Driver ID not provided</p>
+          <p className="text-red-700 dark:text-red-400">
+            Driver ID not provided
+          </p>
         </div>
       </div>
     );
   }
 
   return <DriverDetails driverId={driverId} />;
-} 
+}

@@ -1,8 +1,8 @@
 "use client";
 import AllIncidents from "../components/AllIncidents";
 
-// Add dynamic rendering with no static prerendering
-export const dynamic = "force-dynamic";
+// Set static rendering for Netlify compatibility
+export const dynamic = "force-static";
 
 export default function IncidentsPage() {
   return <AllIncidents />;
