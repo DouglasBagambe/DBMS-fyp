@@ -1120,7 +1120,8 @@ const Analytics = () => {
         backgroundColor: "rgba(59, 130, 246, 0.8)",
         borderColor: "rgb(37, 99, 235)",
         borderWidth: 1,
-        borderRadius: 6,
+        borderRadius: 4,
+        hoverBackgroundColor: "rgba(59, 130, 246, 1)",
       },
     ],
   };
@@ -1140,21 +1141,42 @@ const Analytics = () => {
           size: 16,
           weight: "bold",
         },
+        padding: {
+          top: 10,
+          bottom: 20,
+        },
       },
       tooltip: {
-        enabled: true,
+        callbacks: {
+          label: function (context) {
+            return `${context.raw} incidents`;
+          },
+          title: function (context) {
+            const vehicleIdx = context.dataIndex;
+            return analytics.incidentsByVehicle[vehicleIdx].vehicleNumber;
+          },
+        },
       },
     },
     scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-      },
       y: {
         beginAtZero: true,
         ticks: {
           precision: 0,
+          stepSize: 1,
+        },
+        title: {
+          display: true,
+          text: "Number of Incidents",
+        },
+      },
+      x: {
+        title: {
+          display: true,
+          text: "Vehicle",
+        },
+        grid: {
+          display: false,
         },
       },
     },
@@ -1618,12 +1640,12 @@ const Analytics = () => {
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              {/* Incidents Line Chart */}
+              {/* Incidents Bar Chart */}
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
                 {analytics &&
                 analytics.incidentsByVehicle &&
                 analytics.incidentsByVehicle.length > 0 ? (
-                  <Line
+                  <Bar
                     data={{
                       labels: analytics.incidentsByVehicle.map((item) =>
                         item.vehicleNumber.length > 8
@@ -1636,16 +1658,11 @@ const Analytics = () => {
                           data: analytics.incidentsByVehicle.map(
                             (item) => item.incidents
                           ),
-                          borderColor: "rgb(59, 130, 246)",
-                          backgroundColor: "rgba(59, 130, 246, 0.1)",
-                          tension: 0.3,
-                          fill: true,
-                          pointBackgroundColor: "rgb(37, 99, 235)",
-                          pointBorderColor: "#fff",
-                          pointBorderWidth: 2,
-                          pointRadius: 5,
-                          pointHoverRadius: 7,
-                          borderWidth: 3,
+                          backgroundColor: "rgba(59, 130, 246, 0.8)",
+                          borderColor: "rgb(37, 99, 235)",
+                          borderWidth: 1,
+                          borderRadius: 4,
+                          hoverBackgroundColor: "rgba(59, 130, 246, 1)",
                         },
                       ],
                     }}
@@ -1674,7 +1691,7 @@ const Analytics = () => {
                               return `${context.raw} incidents`;
                             },
                             title: function (context) {
-                              const vehicleIdx = context[0].dataIndex;
+                              const vehicleIdx = context.dataIndex;
                               return analytics.incidentsByVehicle[vehicleIdx]
                                 .vehicleNumber;
                             },
