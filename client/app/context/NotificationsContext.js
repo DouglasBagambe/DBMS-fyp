@@ -2,91 +2,41 @@
 // app/context/NotificationsContext.js
 
 "use client";
-import React, { createContext, useState, useEffect, useRef, useContext } from "react";
+import React, {
+  createContext,
+  useState,
+  useEffect,
+  useRef,
+  useContext,
+} from "react";
 import { getLatestIncident } from "../utils/api";
 
-// Mapping for incident types and their details with enhanced information
-const INCIDENT_TYPES = {
+// Constants for incident types
+export const INCIDENT_TYPES = {
   1: {
     type: "PHONE_USAGE",
     message: "Phone usage detected",
     severity: "high",
-    title: "Phone Usage Alert",
-    icon: "📱",
-    sound: "alert-high.mp3",
-    description: "Driver is using phone while driving",
-    action: "Immediately contact driver to stop phone usage",
-    riskFactor: 0.85,
-    recommendations: [
-      "Immediate contact required",
-      "Schedule safety training",
-      "Review company policy"
-    ]
+    displayName: "Phone Usage",
   },
   2: {
     type: "CIGARETTE",
     message: "Cigarette usage detected",
     severity: "medium",
-    title: "Smoking Alert",
-    icon: "🚬",
-    sound: "alert-medium.mp3",
-    description: "Driver is smoking while driving",
-    action: "Remind driver of company no-smoking policy",
-    riskFactor: 0.65,
-    recommendations: [
-      "Issue verbal warning",
-      "Document incident",
-      "Review smoking policy"
-    ]
+    displayName: "Cigarette Usage",
   },
   3: {
     type: "SEATBELT",
     message: "Seatbelt violation detected",
     severity: "medium",
-    title: "Seatbelt Alert",
-    icon: "⚠️",
-    sound: "alert-medium.mp3",
-    description: "Driver is not wearing seatbelt",
-    action: "Remind driver to secure seatbelt immediately",
-    riskFactor: 0.75,
-    recommendations: [
-      "Immediate reminder to driver",
-      "Document incident",
-      "Review safety protocol"
-    ]
+    displayName: "Seatbelt Violation",
   },
   4: {
     type: "DROWSINESS",
     message: "Driver drowsiness detected",
     severity: "high",
-    title: "Drowsiness Alert",
-    icon: "😴",
-    sound: "alert-high.mp3", 
-    description: "Driver appears to be drowsy",
-    action: "Direct driver to pull over safely and rest",
-    riskFactor: 0.9,
-    recommendations: [
-      "Emergency contact protocol",
-      "Request immediate rest stop",
-      "Schedule shift adjustment"
-    ]
+    displayName: "Drowsiness",
   },
-  5: {
-    type: "DISTRACTION",
-    message: "Driver distraction detected",
-    severity: "medium",
-    title: "Distraction Alert",
-    icon: "👀",
-    sound: "alert-medium.mp3",
-    description: "Driver is distracted from the road",
-    action: "Contact driver to regain focus on driving",
-    riskFactor: 0.7,
-    recommendations: [
-      "Immediate attention alert",
-      "Review distraction sources",
-      "Consider cabin modifications"
-    ]
-  }
 };
 
 // Create the notifications context
@@ -94,7 +44,7 @@ export const NotificationsContext = createContext();
 
 export const NotificationsProvider = ({ children }) => {
   const [showAlert, setShowAlert] = useState(false);
-  const [alertIncident, setAlertIncident] = useState(null);
+  const [alertData, setAlertData] = useState(null); // Renamed from alertIncident to handle both incidents and trips
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notificationHistory, setNotificationHistory] = useState([]);
   const [notificationSettings, setNotificationSettings] = useState({
@@ -103,53 +53,366 @@ export const NotificationsProvider = ({ children }) => {
     inApp: true,
     autoHide: true,
     autoHideDelay: 10000,
-    desktopClickAction: 'focus',
+    desktopClickAction: "focus",
     highPriorityOnly: false,
-    groupBySeverity: true
+    groupBySeverity: true,
+    showTripNotifications: true, // Added to control trip notifications
   });
   const [unreadCount, setUnreadCount] = useState(0);
-  const [socketStatus, setSocketStatus] = useState('disconnected');
+  const [socketStatus, setSocketStatus] = useState("disconnected");
   const [loadingInitial, setLoadingInitial] = useState(true);
-  
+
   const socketRef = useRef(null);
   const audioRef = useRef(null);
   const highAlertAudioRef = useRef(null);
   const mediumAlertAudioRef = useRef(null);
   const lowAlertAudioRef = useRef(null);
+  const tripAudioRef = useRef(null); // New audio for trip notifications
 
-  // Notification permission and setup
+  // Set up socket connection for real-time notifications
+  const setupSocketConnection = async () => {
+    try {
+      // Only import socket.io-client on client side
+      if (typeof window === "undefined") return;
+
+      setSocketStatus("connecting");
+      const API_URL =
+        process.env.NEXT_PUBLIC_API_URL || "https://dbms-o3mb.onrender.com";
+
+      // Dynamically import socket.io-client
+      const { io } = await import("socket.io-client");
+
+      const socket = io(API_URL, {
+        transports: ["websocket", "polling"], // Add polling as fallback
+        withCredentials: true,
+        reconnectionAttempts: 10, // Increased attempts
+        reconnectionDelay: 1000,
+        timeout: 20000, // Increased timeout
+        forceNew: true, // Force a new connection on each attempt
+      });
+
+      socketRef.current = socket;
+
+      // Setup event listeners
+      socket.on("connect", () => {
+        console.log("Socket connected for notifications!");
+        setSocketStatus("connected");
+
+        // Send a ping to keep the connection alive
+        const pingInterval = setInterval(() => {
+          if (socket.connected) {
+            socket.emit("ping", { timestamp: new Date().toISOString() });
+          } else {
+            clearInterval(pingInterval);
+          }
+        }, 30000);
+
+        // Clear interval on disconnect
+        socket.on("disconnect", () => {
+          clearInterval(pingInterval);
+        });
+      });
+
+      socket.on("disconnect", () => {
+        console.log("Socket disconnected!");
+        setSocketStatus("disconnected");
+
+        // Auto-reconnect after a delay
+        setTimeout(() => {
+          if (socketRef.current && !socketRef.current.connected) {
+            console.log("Auto-reconnecting socket...");
+            socketRef.current.connect();
+          }
+        }, 5000);
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("Socket connection error:", err);
+        setSocketStatus("error");
+
+        // Try with different transport after delay
+        setTimeout(() => {
+          if (socketRef.current) {
+            console.log("Trying alternative transport...");
+            socketRef.current.io.opts.transports = ["polling", "websocket"];
+            socketRef.current.connect();
+          }
+        }, 5000);
+      });
+
+      // Listen for new incidents with enhanced error handling
+      socket.on("newIncident", (incident) => {
+        try {
+          console.log("Received new incident notification:", incident);
+
+          // Validate data
+          if (!incident || !incident.incidentNo) {
+            console.error("Invalid incident data received:", incident);
+            return;
+          }
+
+          // Check if we should process this incident
+          if (notificationSettings.highPriorityOnly) {
+            const incidentInfo = getIncidentInfo(incident.incidentNo);
+            if (incidentInfo?.severity !== "high") {
+              console.log(
+                "Ignoring non-high priority incident due to settings"
+              );
+              return;
+            }
+          }
+
+          processNewIncident(incident);
+        } catch (error) {
+          console.error("Error processing incident notification:", error);
+        }
+      });
+
+      // Listen for trip updates
+      socket.on("tripUpdate", (tripEvent) => {
+        try {
+          console.log("Received trip update notification:", tripEvent);
+
+          // Validate data
+          if (!tripEvent || !tripEvent.type) {
+            console.error("Invalid trip data received:", tripEvent);
+            return;
+          }
+
+          // Only process if trip notifications are enabled
+          if (notificationSettings.showTripNotifications) {
+            processTripUpdate(tripEvent);
+          } else {
+            console.log("Trip notifications disabled in settings");
+          }
+        } catch (error) {
+          console.error("Error processing trip notification:", error);
+        }
+      });
+
+      // Server pong response handler
+      socket.on("pong", (data) => {
+        console.log("Received pong from server");
+      });
+
+      console.log("Socket connection setup completed with enhanced config");
+    } catch (error) {
+      console.error("Failed to setup socket connection:", error);
+      setSocketStatus("error");
+    }
+  };
+
+  // Process newly received incidents
+  const processNewIncident = (incident) => {
+    if (!incident) return;
+
+    // Store incident for display
+    setAlertData({
+      ...incident,
+      alertType: "incident",
+      alertTitle: "SAFETY ALERT",
+    });
+    setShowAlert(true);
+
+    // Get incident info for additional details
+    const incidentInfo = getIncidentInfo(incident.incidentNo);
+
+    // Select appropriate sound based on severity
+    if (notificationSettings.sound) {
+      if (incidentInfo?.severity === "high") {
+        audioRef.current = highAlertAudioRef.current;
+      } else if (incidentInfo?.severity === "medium") {
+        audioRef.current = mediumAlertAudioRef.current;
+      } else {
+        audioRef.current = lowAlertAudioRef.current;
+      }
+
+      // Play the sound immediately
+      if (audioRef.current) {
+        audioRef.current
+          .play()
+          .catch((err) => console.log("Error playing sound:", err));
+      }
+    }
+
+    // Add to notification history
+    const newNotification = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      incident: incident,
+      read: false,
+      timestamp: new Date().toISOString(),
+      type: incidentInfo?.type || "UNKNOWN",
+      severity: incidentInfo?.severity || "medium",
+      alertType: "incident",
+      message: `${incident.driverName || "Driver"}: ${
+        incidentInfo?.message || "Safety incident detected"
+      }`,
+    };
+
+    setNotificationHistory((prev) => [newNotification, ...prev].slice(0, 100)); // Keep last 100
+    setUnreadCount((prev) => prev + 1);
+
+    // Show desktop notification
+    showDesktopNotification({
+      title: "SAFETY ALERT!",
+      body: `${incident.driverName || "Driver"}: ${
+        incidentInfo?.message || "Safety incident detected"
+      }`,
+      tag: `incident-${incident.id || Date.now()}`,
+      requireInteraction: true,
+      icon: "/favicon.ico",
+    });
+
+    // Auto-hide alert after delay if enabled
+    if (notificationSettings.autoHide) {
+      setTimeout(() => {
+        setShowAlert(false);
+      }, notificationSettings.autoHideDelay);
+    }
+  };
+
+  // Process trip updates
+  const processTripUpdate = (tripEvent) => {
+    if (!tripEvent) return;
+
+    const isStart = tripEvent.type === "trip_started";
+    const message = isStart
+      ? `${tripEvent.driver_name || "Driver"} started a trip with ${
+          tripEvent.vehicle_number || "vehicle"
+        }`
+      : `${tripEvent.driver_name || "Driver"} completed a trip with ${
+          tripEvent.vehicle_number || "vehicle"
+        }${tripEvent.distance ? ` (${tripEvent.distance}km)` : ""}`;
+
+    // Store trip data for display
+    setAlertData({
+      ...tripEvent,
+      alertType: "trip",
+      alertTitle: isStart ? "TRIP STARTED" : "TRIP COMPLETED",
+      message: message,
+    });
+    setShowAlert(true);
+
+    // Use trip audio notification
+    if (notificationSettings.sound && tripAudioRef.current) {
+      tripAudioRef.current
+        .play()
+        .catch((err) => console.log("Error playing sound:", err));
+    }
+
+    // Add to notification history
+    const newNotification = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      trip: tripEvent,
+      read: false,
+      timestamp: new Date().toISOString(),
+      type: isStart ? "TRIP_START" : "TRIP_END",
+      severity: "low",
+      alertType: "trip",
+      message: message,
+    };
+
+    setNotificationHistory((prev) => [newNotification, ...prev].slice(0, 100));
+    setUnreadCount((prev) => prev + 1);
+
+    // Show desktop notification
+    showDesktopNotification({
+      title: isStart ? "Trip Started" : "Trip Completed",
+      body: message,
+      tag: `trip-${tripEvent.trip_id || Date.now()}`,
+      requireInteraction: false,
+      icon: "/favicon.ico",
+    });
+
+    // Auto-hide after a shorter delay for trip notifications
+    if (notificationSettings.autoHide) {
+      setTimeout(() => {
+        setShowAlert(false);
+      }, 6000); // Shorter time for trip notifications
+    }
+  };
+
+  // Show desktop notification with enhanced reliability
+  const showDesktopNotification = (options) => {
+    if (!("Notification" in window)) {
+      console.log("This browser does not support desktop notifications");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      try {
+        // Use setTimeout to ensure notification is shown even when tab is inactive
+        setTimeout(() => {
+          const notification = new Notification(options.title, {
+            body: options.body,
+            icon: options.icon || "/favicon.ico",
+            tag: options.tag,
+            requireInteraction: options.requireInteraction || false,
+            silent: false, // Use browser's sound instead of our custom one
+            vibrate: [200, 100, 200], // Vibration pattern for mobile devices
+          });
+
+          notification.onclick = () => {
+            window.focus();
+            notification.close();
+
+            // If the user clicked the notification, close the in-app alert too
+            setShowAlert(false);
+          };
+        }, 0);
+      } catch (err) {
+        console.error("Failed to show desktop notification:", err);
+      }
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          showDesktopNotification(options);
+        }
+      });
+    }
+  };
+
+  // Initialize notification system
   useEffect(() => {
     // Only run on client side
-    if (typeof window === 'undefined') return;
-    
+    if (typeof window === "undefined") return;
+
     // Load notification history from localStorage
     try {
-      const storedHistory = localStorage.getItem('notificationHistory');
+      const storedHistory = localStorage.getItem("notificationHistory");
       if (storedHistory) {
         const parsedHistory = JSON.parse(storedHistory);
         setNotificationHistory(parsedHistory);
-        setUnreadCount(parsedHistory.filter(n => !n.read).length);
+        setUnreadCount(parsedHistory.filter((n) => !n.read).length);
       }
     } catch (error) {
       console.error("Failed to load notification history:", error);
     }
-    
+
     // Setup audio for notification sounds with preloading
     highAlertAudioRef.current = new Audio("/sounds/alert-high.mp3");
     mediumAlertAudioRef.current = new Audio("/sounds/alert-medium.mp3");
     lowAlertAudioRef.current = new Audio("/sounds/alert-low.mp3");
-    
+    tripAudioRef.current = new Audio("/sounds/notification.mp3");
+
     // Preload sounds
     highAlertAudioRef.current.load();
     mediumAlertAudioRef.current.load();
     lowAlertAudioRef.current.load();
-    
+    tripAudioRef.current.load();
+
+    // Set volumes
+    highAlertAudioRef.current.volume = 1.0;
+    mediumAlertAudioRef.current.volume = 0.8;
+    lowAlertAudioRef.current.volume = 0.6;
+    tripAudioRef.current.volume = 0.7;
+
     // Default to high alert sound
     audioRef.current = highAlertAudioRef.current;
-    
+
     // Check for stored settings
     try {
-      const storedSettings = localStorage.getItem('notificationSettings');
+      const storedSettings = localStorage.getItem("notificationSettings");
       if (storedSettings) {
         setNotificationSettings(JSON.parse(storedSettings));
       }
@@ -163,23 +426,35 @@ export const NotificationsProvider = ({ children }) => {
         console.log("This browser does not support desktop notifications");
         return false;
       }
-      
+
       if (Notification.permission === "granted") {
         setNotificationsEnabled(true);
         return true;
       }
-      
+
       return false;
     };
 
     checkPermission();
-    
-    // Fetch latest incident to show any recent alerts
-    fetchLatestIncident()
-      .finally(() => {
-        setLoadingInitial(false);
+
+    // Request notification permission immediately if not yet granted
+    if (
+      "Notification" in window &&
+      Notification.permission !== "granted" &&
+      Notification.permission !== "denied"
+    ) {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          setNotificationsEnabled(true);
+        }
       });
-    
+    }
+
+    // Fetch latest incident to show any recent alerts
+    fetchLatestIncident().finally(() => {
+      setLoadingInitial(false);
+    });
+
     // Setup socket connection
     setupSocketConnection();
 
@@ -193,9 +468,12 @@ export const NotificationsProvider = ({ children }) => {
 
   // Save notification history when it changes
   useEffect(() => {
-    if (typeof window !== 'undefined' && notificationHistory.length > 0) {
+    if (typeof window !== "undefined" && notificationHistory.length > 0) {
       try {
-        localStorage.setItem('notificationHistory', JSON.stringify(notificationHistory.slice(0, 100)));
+        localStorage.setItem(
+          "notificationHistory",
+          JSON.stringify(notificationHistory.slice(0, 100))
+        );
       } catch (error) {
         console.error("Failed to save notification history:", error);
       }
@@ -204,327 +482,22 @@ export const NotificationsProvider = ({ children }) => {
 
   // Save settings when they change
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
-        localStorage.setItem('notificationSettings', JSON.stringify(notificationSettings));
+        localStorage.setItem(
+          "notificationSettings",
+          JSON.stringify(notificationSettings)
+        );
       } catch (error) {
         console.error("Failed to save notification settings:", error);
       }
     }
   }, [notificationSettings]);
 
-  // Set up socket connection for real-time notifications
-  const setupSocketConnection = async () => {
-    try {
-      // Only import socket.io-client on client side
-      if (typeof window === 'undefined') return;
-      
-      setSocketStatus('connecting');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://dbms-o3mb.onrender.com";
-      
-      // Dynamically import socket.io-client
-      const { io } = await import('socket.io-client');
-      
-      const socket = io(API_URL, {
-        transports: ["websocket"],
-        withCredentials: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        timeout: 10000
-      });
-      
-      socketRef.current = socket;
-      
-      // Setup event listeners
-      socket.on("connect", () => {
-        console.log("Socket connected!");
-        setSocketStatus('connected');
-      });
-      
-      socket.on("disconnect", () => {
-        console.log("Socket disconnected!");
-        setSocketStatus('disconnected');
-      });
-      
-      socket.on("connect_error", (err) => {
-        console.error("Socket connection error:", err);
-        setSocketStatus('error');
-      });
-      
-      // Listen for new incidents
-      socket.on("newIncident", (incident) => {
-        console.log("Received new incident:", incident);
-        
-        // Check if we should process this incident
-        if (notificationSettings.highPriorityOnly) {
-          const incidentInfo = getIncidentInfo(incident.incidentNo);
-          if (incidentInfo?.severity !== "high") {
-            console.log("Ignoring non-high priority incident due to settings");
-            return;
-          }
-        }
-        
-        processNewIncident(incident);
-      });
-      
-      console.log("Socket connection setup completed");
-    } catch (error) {
-      console.error("Failed to setup socket connection:", error);
-      setSocketStatus('error');
-    }
-  };
-
-  // Attempt to reconnect socket if disconnected
-  const reconnectSocket = () => {
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-    }
-    setupSocketConnection();
-  };
-
-  // Process newly received incidents
-  const processNewIncident = (incident) => {
-    if (!incident) return;
-    
-    // Store incident for display
-    setAlertIncident(incident);
-    setShowAlert(true);
-    
-    // Get incident info for additional details
-    const incidentInfo = getIncidentInfo(incident.incidentNo);
-    
-    // Select appropriate sound based on severity
-    if (notificationSettings.sound) {
-      if (incidentInfo?.severity === "high") {
-        audioRef.current = highAlertAudioRef.current;
-      } else if (incidentInfo?.severity === "medium") {
-        audioRef.current = mediumAlertAudioRef.current;
-      } else {
-        audioRef.current = lowAlertAudioRef.current;
-      }
-    }
-    
-    // Add to notification history
-    const newNotification = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      incident: incident,
-      read: false,
-      timestamp: new Date().toISOString(),
-      type: incidentInfo?.type || "UNKNOWN",
-      severity: incidentInfo?.severity || "medium",
-    };
-    
-    setNotificationHistory(prev => [newNotification, ...prev].slice(0, 100)); // Keep last 100
-    setUnreadCount(prev => prev + 1);
-    
-    // Show desktop notification if enabled
-    if (notificationsEnabled && notificationSettings.desktop) {
-      showDesktopNotification(incident);
-    }
-    
-    // Play sound if enabled
-    if (notificationSettings.sound && audioRef.current) {
-      audioRef.current.play().catch(err => console.log("Error playing sound:", err));
-    }
-    
-    // Auto-hide alert after delay if enabled
-    if (notificationSettings.autoHide) {
-      setTimeout(() => {
-        setShowAlert(false);
-      }, notificationSettings.autoHideDelay);
-    }
-  };
-
-  // Fetch the latest incident on initial load
-  const fetchLatestIncident = async () => {
-    try {
-      const response = await getLatestIncident();
-      if (response && response.incident) {
-        const incidentTime = new Date(response.incident.timestamp);
-        const now = new Date();
-        const timeDiff = (now - incidentTime) / 1000 / 60; // in minutes
-        
-        if (timeDiff < 5) { // Show if less than 5 minutes old
-          setAlertIncident(response.incident);
-          setShowAlert(true);
-          
-          // Auto-hide after delay if enabled
-          if (notificationSettings.autoHide) {
-            setTimeout(() => {
-              setShowAlert(false);
-            }, notificationSettings.autoHideDelay);
-          }
-        }
-      }
-      return response;
-    } catch (error) {
-      console.error("Error fetching latest incident:", error);
-      throw error;
-    }
-  };
-
-  // Show a browser notification
-  const showDesktopNotification = (incident) => {
-    if (!("Notification" in window)) return;
-    
-    const incidentInfo = getIncidentInfo(incident.incidentNo);
-    
-    try {
-      const notification = new Notification(incidentInfo?.title || "Safety Alert", {
-        body: `${incident.driverName}: ${incidentInfo?.message || "Safety violation detected"}`,
-        icon: "/logo.png",
-        tag: `safety-alert-${Date.now()}`,
-        vibrate: [200, 100, 200],
-        badge: "/icon-badge.png",
-        requireInteraction: incidentInfo?.severity === "high",
-        // Add actions for quick responses
-        actions: [
-          { action: 'view', title: 'View Details' },
-          { action: 'dismiss', title: 'Dismiss' }
-        ]
-      });
-      
-      // Handle notification click
-      notification.onclick = () => {
-        switch (notificationSettings.desktopClickAction) {
-          case 'focus':
-            window.focus();
-            break;
-          case 'driverDetails':
-            window.location.href = `/driver-details?driverId=${incident.driverId}`;
-            break;
-          default:
-            window.focus();
-        }
-        notification.close();
-      };
-      
-      // Auto close after delay for non-critical alerts
-      if (incidentInfo?.severity !== "high") {
-        setTimeout(() => notification.close(), 10000);
-      }
-    } catch (error) {
-      console.error("Error showing notification:", error);
-    }
-  };
-
-  // Request notification permissions
-  const requestNotificationPermission = async () => {
-    if (!("Notification" in window)) {
-      console.log("This browser does not support desktop notifications");
-      return false;
-    }
-    
-    if (Notification.permission === "granted") {
-      setNotificationsEnabled(true);
-      return true;
-    }
-    
-    if (Notification.permission !== "denied") {
-      try {
-        const permission = await Notification.requestPermission();
-        if (permission === "granted") {
-          setNotificationsEnabled(true);
-          return true;
-        }
-      } catch (error) {
-        console.error("Error requesting notification permission:", error);
-      }
-    }
-    
-    return false;
-  };
-
-  // Update notification settings
-  const updateNotificationSettings = (newSettings) => {
-    setNotificationSettings(prev => ({
-      ...prev,
-      ...newSettings
-    }));
-  };
-
-  // Close the current alert
-  const closeCurrentAlert = () => {
-    setShowAlert(false);
-  };
-
-  // Mark all notifications as read
-  const markAllAsRead = () => {
-    setNotificationHistory(prev => 
-      prev.map(notification => ({ ...notification, read: true }))
-    );
-    setUnreadCount(0);
-  };
-
-  // Mark a specific notification as read
-  const markAsRead = (notificationId) => {
-    setNotificationHistory(prev => 
-      prev.map(notification => 
-        notification.id === notificationId 
-          ? { ...notification, read: true } 
-          : notification
-      )
-    );
-    updateUnreadCount();
-  };
-
-  // Update the unread count based on current notifications
-  const updateUnreadCount = () => {
-    const count = notificationHistory.filter(notification => !notification.read).length;
-    setUnreadCount(count);
-  };
-
-  // Clear all notifications
-  const clearAllNotifications = () => {
-    setNotificationHistory([]);
-    setUnreadCount(0);
-    
-    // Also clear from localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('notificationHistory');
-    }
-  };
-
-  // Group notifications by severity
-  const getGroupedNotifications = () => {
-    if (!notificationSettings.groupBySeverity) {
-      return { all: notificationHistory };
-    }
-    
-    return notificationHistory.reduce((groups, notification) => {
-      const severity = notification.severity || 'medium';
-      if (!groups[severity]) {
-        groups[severity] = [];
-      }
-      groups[severity].push(notification);
-      return groups;
-    }, { high: [], medium: [], low: [] });
-  };
-
-  // Get incident type info based on incident number
-  const getIncidentInfo = (incidentNo) => {
-    return INCIDENT_TYPES[incidentNo] || null;
-  };
-
-  // Simulate a test notification for development
-  const triggerTestNotification = (incidentType = 1) => {
-    const testIncident = {
-      incidentNo: incidentType,
-      driverName: "Test Driver",
-      driverId: "test-driver-123",
-      vehicleNumber: "TEST-1234",
-      timestamp: new Date().toISOString(),
-      location: "Test Location",
-      status: "ACTIVE"
-    };
-    
-    processNewIncident(testIncident);
-  };
-
   // Value to be provided by the context
   const contextValue = {
     showAlert,
-    alertIncident,
+    alertData, // Renamed from alertIncident to handle both types
     notificationsEnabled,
     notificationSettings,
     notificationHistory,
@@ -535,12 +508,12 @@ export const NotificationsProvider = ({ children }) => {
     getGroupedNotifications,
     requestNotificationPermission,
     updateNotificationSettings,
-    closeCurrentAlert,
+    closeCurrentAlert: () => setShowAlert(false),
     markAllAsRead,
     markAsRead,
     clearAllNotifications,
-    reconnectSocket,
-    triggerTestNotification
+    reconnectSocket: setupSocketConnection,
+    triggerTestNotification,
   };
 
   return (
@@ -554,7 +527,9 @@ export const NotificationsProvider = ({ children }) => {
 export const useNotifications = () => {
   const context = useContext(NotificationsContext);
   if (context === undefined) {
-    throw new Error('useNotifications must be used within a NotificationsProvider');
+    throw new Error(
+      "useNotifications must be used within a NotificationsProvider"
+    );
   }
   return context;
 };

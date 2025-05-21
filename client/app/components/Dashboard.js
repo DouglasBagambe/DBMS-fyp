@@ -98,13 +98,12 @@ const Dashboard = () => {
         const { io } = await import("socket.io-client");
 
         const socket = io(API_URL, {
-          transports: ["websocket", "polling"], // Try websocket first, fall back to polling
+          transports: ["websocket", "polling"], // Include polling as fallback
           withCredentials: true,
           reconnectionAttempts: 10, // Increased attempts
           reconnectionDelay: 1000,
           timeout: 20000, // Increased timeout
-          autoConnect: true,
-          forceNew: true, // Force a new connection
+          forceNew: true, // Force new connection
         });
 
         socketRef.current = socket;
@@ -114,16 +113,15 @@ const Dashboard = () => {
           console.log("Socket connected for Dashboard!");
           setSocketStatus("connected");
 
-          // Send a ping to the server to keep the connection alive
+          // Keep connection alive with ping
           const pingInterval = setInterval(() => {
             if (socket.connected) {
               socket.emit("ping", { timestamp: new Date().toISOString() });
             } else {
               clearInterval(pingInterval);
             }
-          }, 30000); // Ping every 30 seconds
+          }, 30000);
 
-          // Clear interval on disconnect
           socket.on("disconnect", () => {
             clearInterval(pingInterval);
           });
@@ -133,7 +131,7 @@ const Dashboard = () => {
           console.log("Socket disconnected!");
           setSocketStatus("disconnected");
 
-          // Attempt to reconnect after a short delay
+          // Try to reconnect after a delay
           setTimeout(() => {
             if (socketRef.current && !socketRef.current.connected) {
               console.log("Attempting to reconnect...");
@@ -146,50 +144,14 @@ const Dashboard = () => {
           console.error("Socket connection error:", err);
           setSocketStatus("error");
 
-          // Attempt to reconnect with a different transport
+          // Try with different transport after delay
           setTimeout(() => {
             if (socketRef.current) {
-              console.log(
-                "Attempting to reconnect with different transport..."
-              );
+              console.log("Trying alternative transport...");
               socketRef.current.io.opts.transports = ["polling", "websocket"];
               socketRef.current.connect();
             }
           }, 5000);
-        });
-
-        socket.on("reconnect_attempt", (attemptNumber) => {
-          console.log(`Socket reconnection attempt ${attemptNumber}`);
-          setSocketStatus("connecting");
-        });
-
-        socket.on("reconnect", () => {
-          console.log("Socket reconnected successfully!");
-          setSocketStatus("connected");
-        });
-
-        socket.on("reconnect_error", (err) => {
-          console.error("Socket reconnection error:", err);
-          setSocketStatus("error");
-        });
-
-        socket.on("reconnect_failed", () => {
-          console.error("Socket reconnection failed");
-          setSocketStatus("error");
-
-          // Final attempt with completely new connection
-          setTimeout(() => {
-            if (socketRef.current) {
-              socketRef.current.disconnect();
-              setupSocketConnection(); // Recursive call to try setup again
-            }
-          }, 10000);
-        });
-
-        // Server pong response handler
-        socket.on("pong", (data) => {
-          console.log("Received pong from server:", data);
-          // Connection is alive
         });
 
         // Enhanced listener for new incidents in real-time with better error handling
@@ -222,6 +184,9 @@ const Dashboard = () => {
               incident.driverName || incident.driver_name || "Unknown Driver";
             const vehicleNumber =
               incident.vehicleNumber || incident.vehicle_number || "Unknown";
+            const timestamp = new Date(
+              incident.timestamp || incident.created_at || new Date()
+            );
 
             const formattedIncident = {
               id: incident.id || Date.now(),
@@ -230,10 +195,7 @@ const Dashboard = () => {
               vehicleId: incident.vehicleId || incident.vehicle_id,
               vehicleNumber,
               incidentNo,
-              timestamp:
-                incident.timestamp ||
-                incident.created_at ||
-                new Date().toISOString(),
+              timestamp,
               type: incidentInfo.type.toLowerCase(),
               severity: incidentInfo.severity,
               message: `Driver ${driverName}: ${incidentInfo.message}`,
@@ -242,10 +204,7 @@ const Dashboard = () => {
             // Update alerts state (add to beginning)
             setDashboardData((prev) => ({
               ...prev,
-              alerts: [
-                formattedIncident,
-                ...(prev.alerts ? prev.alerts.slice(0, 2) : []),
-              ],
+              alerts: [formattedIncident, ...(prev.alerts?.slice(0, 2) || [])],
             }));
 
             // Update activity data state
@@ -255,83 +214,36 @@ const Dashboard = () => {
                 type:
                   formattedIncident.severity === "high" ? "danger" : "warning",
                 message: formattedIncident.message,
-                timestamp: new Date(
-                  formattedIncident.timestamp
-                ).toLocaleTimeString(),
+                timestamp,
+                displayTime: timestamp.toLocaleTimeString(),
                 incident_no: formattedIncident.incidentNo,
+                sortTime: timestamp.getTime(),
               },
-              ...(prev || []).slice(0, 19),
+              ...(prev?.slice(0, 19) || []),
             ]);
 
             // Update metrics
             setMetrics((prev) => ({
               ...prev,
-              recentIncidents: (prev.recentIncidents || 0) + 1,
+              recentIncidents: (prev?.recentIncidents || 0) + 1,
             }));
 
-            // Immediately show browser notification
-            if ("Notification" in window) {
-              // Always attempt to show notification
-              if (Notification.permission === "granted") {
-                // Use setTimeout to ensure notification is shown immediately
-                setTimeout(() => {
-                  try {
-                    const notification = new Notification(
-                      "⚠️ Driver Safety Alert",
-                      {
-                        body: formattedIncident.message,
-                        icon: "/favicon.ico",
-                        tag: `incident-${formattedIncident.id}`, // Prevent duplicate notifications
-                        requireInteraction: true, // Keep notification until user interacts with it
-                      }
-                    );
-
-                    notification.onclick = () => {
-                      window.focus();
-                      notification.close();
-                    };
-                  } catch (err) {
-                    console.error("Error showing notification:", err);
-                  }
-                }, 0);
-              } else if (Notification.permission !== "denied") {
-                Notification.requestPermission().then((permission) => {
-                  if (permission === "granted") {
-                    // Show notification immediately after permission granted
-                    const notification = new Notification(
-                      "⚠️ Driver Safety Alert",
-                      {
-                        body: formattedIncident.message,
-                        icon: "/favicon.ico",
-                        tag: `incident-${formattedIncident.id}`,
-                        requireInteraction: true,
-                      }
-                    );
-
-                    notification.onclick = () => {
-                      window.focus();
-                      notification.close();
-                    };
-                  }
-                });
-              }
-            }
+            // Show browser notification
+            showBrowserNotification(
+              "⚠️ Driver Safety Alert",
+              formattedIncident.message,
+              `incident-${formattedIncident.id}`,
+              true
+            );
 
             // Play an alert sound
-            try {
-              const audio = new Audio("/alert.mp3"); // Make sure to add this file to your public folder
-              audio
-                .play()
-                .catch((err) => console.log("Audio play error:", err));
-            } catch (err) {
-              console.log("Audio error:", err);
-            }
+            playSound("alert");
           } catch (err) {
             console.error("Error processing new incident:", err);
           }
         });
 
-        // Enhanced listener for trip updates in real-time with better error handling
+        // Enhanced listener for trip updates in real-time
         socket.on("tripUpdate", (tripEvent) => {
           try {
             console.log("Received trip update in Dashboard:", tripEvent);
@@ -345,6 +257,7 @@ const Dashboard = () => {
               tripEvent.driver_name || tripEvent.driverName || "Unknown Driver";
             const vehicleNumber =
               tripEvent.vehicle_number || tripEvent.vehicleNumber || "Unknown";
+            const timestamp = new Date(tripEvent.timestamp || new Date());
 
             // Format the trip activity
             const activityType =
@@ -356,81 +269,53 @@ const Dashboard = () => {
                     tripEvent.distance ? ` (${tripEvent.distance} km)` : ""
                   }`;
 
-            // Update activity data - handle null prev state
+            // Update activity data
             setActivityData((prev) => [
               {
                 id: `trip-${tripEvent.trip_id || Date.now()}`,
                 type: activityType,
                 message,
-                timestamp: new Date(
-                  tripEvent.timestamp || new Date()
-                ).toLocaleTimeString(),
-                driver_id: tripEvent.driver_id || tripEvent.driverId,
-                vehicle_id: tripEvent.vehicle_id || tripEvent.vehicleId,
+                timestamp,
+                displayTime: timestamp.toLocaleTimeString(),
+                driver_id: tripEvent.driver_id,
+                vehicle_id: tripEvent.vehicle_id,
+                sortTime: timestamp.getTime(),
               },
-              ...(prev || []).slice(0, 19),
+              ...(prev?.slice(0, 19) || []),
             ]);
 
             // Update metrics if a trip is completed
             if (tripEvent.type === "trip_ended") {
               setDashboardData((prev) => ({
                 ...prev,
-                totalTrips: (prev.totalTrips || 0) + 1,
+                totalTrips: (prev?.totalTrips || 0) + 1,
               }));
             } else if (tripEvent.type === "trip_started") {
               // If trip started, increment active trips count
               setDashboardData((prev) => ({
                 ...prev,
-                activeTrips: (prev.activeTrips || 0) + 1,
-                tripsToday: (prev.tripsToday || 0) + 1,
+                activeTrips: (prev?.activeTrips || 0) + 1,
+                tripsToday: (prev?.tripsToday || 0) + 1,
               }));
             }
 
-            // Immediately show browser notification with proper icon
-            // Request notification permission on component mount
-            if ("Notification" in window) {
-              if (
-                Notification.permission !== "granted" &&
-                Notification.permission !== "denied"
-              ) {
-                // Request permission on component mount
-                Notification.requestPermission().then((permission) => {
-                  console.log("Notification permission:", permission);
-                  if (permission === "granted") {
-                    // Send a test notification to confirm it works
-                    setTimeout(() => {
-                      const notification = new Notification(
-                        "Driver Safety System",
-                        {
-                          body: "Real-time safety alerts are now enabled",
-                          icon: "/favicon.ico",
-                        }
-                      );
+            // Show browser notification
+            showBrowserNotification(
+              tripEvent.type === "trip_started"
+                ? "Trip Started"
+                : "Trip Completed",
+              message,
+              `trip-${tripEvent.trip_id || Date.now()}`,
+              false
+            );
 
-                      notification.onclick = () => {
-                        window.focus();
-                        notification.close();
-                      };
-                    }, 1000);
-                  }
-                });
-              }
-            }
-
-            // Play a notification sound for trips
-            try {
-              const audio = new Audio("/notification.mp3"); // Add this file to your public folder
-              audio.volume = 0.7; // Lower volume for trip notifications
-              audio
-                .play()
-                .catch((err) => console.log("Audio play error:", err));
-            } catch (err) {
-              console.log("Audio error:", err);
-            }
+            // Play trip sound
+            playSound("trip");
           } catch (err) {
             console.error("Error processing trip update:", err);
           }
         });
+
         return () => {
           socket.disconnect();
         };
@@ -616,61 +501,8 @@ const Dashboard = () => {
         // Set safety recommendation based on most common violation
         setSafetyRecommendation(getRecommendationByType(mostCommonIncidentNo));
 
-        // Process activity data based on real trips and incidents
-        const activity = [
-          // Add trip started events
-          ...filteredTrips
-            .filter((trip) => trip.status !== "cancelled")
-            .map((trip, index) => ({
-              id: `trip-start-${trip.id}`,
-              type: "trip_start",
-              message: `Driver ${trip.driver_name} started trip with vehicle ${trip.vehicle_number}`,
-              timestamp: new Date(trip.start_time).toLocaleTimeString(),
-              driver_id: trip.driver_id,
-              vehicle_id: trip.vehicle_id,
-            })),
-          // Add trip ended events
-          ...filteredTrips
-            .filter((trip) => trip.status === "completed" && trip.end_time)
-            .map((trip, index) => ({
-              id: `trip-end-${trip.id}`,
-              type: "safe",
-              message: `Driver ${
-                trip.driver_name
-              } completed trip with vehicle ${trip.vehicle_number}${
-                trip.distance ? ` (${trip.distance} km)` : ""
-              }`,
-              timestamp: new Date(trip.end_time).toLocaleTimeString(),
-              driver_id: trip.driver_id,
-              vehicle_id: trip.vehicle_id,
-              duration: trip.duration ? `${trip.duration} min` : null,
-            })),
-          ...(filteredIncidents || [])
-            .filter(
-              (incident) =>
-                incident.incident_no && getIncidentInfo(incident.incident_no)
-            )
-            .map((incident, index) => {
-              // Get incident type info based on incident_no
-              const incidentInfo = getIncidentInfo(incident.incident_no);
-
-              // Skip if incident number is not in our supported list (1-4)
-              if (!incidentInfo) return null;
-
-              // Determine activity type based on severity
-              const activityType =
-                incidentInfo.severity === "high" ? "danger" : "warning";
-
-              return {
-                id: `incident-${index}`,
-                type: activityType,
-                message: `Driver ${incident.driver_name}: ${incidentInfo.message}`,
-                timestamp: new Date(incident.created_at).toLocaleTimeString(),
-                incident_no: incident.incident_no,
-              };
-            })
-            .filter(Boolean), // Remove null entries
-        ].slice(0, 20); // Show latest 20 recent activities
+        // Process activity data based on real trips and incidents - fixed to properly sort by timestamp
+        const activity = processAllActivity();
 
         setDashboardData({
           totalTrips,
@@ -800,6 +632,150 @@ const Dashboard = () => {
 
   const handleViewAllIncidents = () => {
     router.push("/incidents");
+  };
+
+  // Process activity data based on real trips and incidents - fixed to properly sort by timestamp
+  const processAllActivity = () => {
+    try {
+      // Create arrays for all activities
+      const allActivities = [];
+
+      // Add trip started events
+      if (filteredTrips && filteredTrips.length > 0) {
+        filteredTrips
+          .filter((trip) => trip.status !== "cancelled" && trip.start_time)
+          .forEach((trip) => {
+            const startTime = new Date(trip.start_time);
+            allActivities.push({
+              id: `trip-start-${trip.id || Date.now()}`,
+              type: "trip_start",
+              message: `Driver ${
+                trip.driver_name || "Unknown"
+              } started trip with vehicle ${trip.vehicle_number || "Unknown"}`,
+              timestamp: startTime,
+              displayTime: startTime.toLocaleTimeString(),
+              driver_id: trip.driver_id,
+              vehicle_id: trip.vehicle_id,
+              sortTime: startTime.getTime(),
+            });
+          });
+      }
+
+      // Add trip ended events
+      if (filteredTrips && filteredTrips.length > 0) {
+        filteredTrips
+          .filter((trip) => trip.status === "completed" && trip.end_time)
+          .forEach((trip) => {
+            const endTime = new Date(trip.end_time);
+            allActivities.push({
+              id: `trip-end-${trip.id || Date.now()}`,
+              type: "safe",
+              message: `Driver ${
+                trip.driver_name || "Unknown"
+              } completed trip with vehicle ${
+                trip.vehicle_number || "Unknown"
+              }${trip.distance ? ` (${trip.distance} km)` : ""}`,
+              timestamp: endTime,
+              displayTime: endTime.toLocaleTimeString(),
+              driver_id: trip.driver_id,
+              vehicle_id: trip.vehicle_id,
+              duration: trip.duration ? `${trip.duration} min` : null,
+              sortTime: endTime.getTime(),
+            });
+          });
+      }
+
+      // Add incidents
+      if (filteredIncidents && filteredIncidents.length > 0) {
+        filteredIncidents
+          .filter(
+            (incident) =>
+              incident &&
+              incident.incident_no &&
+              getIncidentInfo(incident.incident_no)
+          )
+          .forEach((incident) => {
+            // Get incident type info based on incident_no
+            const incidentInfo = getIncidentInfo(incident.incident_no);
+            if (!incidentInfo) return;
+
+            // Determine activity type based on severity
+            const activityType =
+              incidentInfo.severity === "high" ? "danger" : "warning";
+            const incidentTime = new Date(
+              incident.created_at || incident.incident_date || new Date()
+            );
+
+            allActivities.push({
+              id: `incident-${incident.id || Date.now()}`,
+              type: activityType,
+              message: `Driver ${incident.driver_name || "Unknown"}: ${
+                incidentInfo.message
+              }`,
+              timestamp: incidentTime,
+              displayTime: incidentTime.toLocaleTimeString(),
+              incident_no: incident.incident_no,
+              sortTime: incidentTime.getTime(),
+            });
+          });
+      }
+
+      // Sort all activities by timestamp (newest first)
+      allActivities.sort((a, b) => b.sortTime - a.sortTime);
+
+      // Take only the 20 most recent
+      return allActivities.slice(0, 20);
+    } catch (error) {
+      console.error("Error processing activities:", error);
+      return [];
+    }
+  };
+
+  // Helper to show browser notifications
+  const showBrowserNotification = (
+    title,
+    body,
+    tag,
+    requireInteraction = false
+  ) => {
+    if ("Notification" in window) {
+      if (Notification.permission === "granted") {
+        // Use setTimeout to ensure notification is shown immediately
+        setTimeout(() => {
+          try {
+            const notification = new Notification(title, {
+              body,
+              icon: "/favicon.ico",
+              tag,
+              requireInteraction,
+              silent: false, // Let browser handle sound
+              vibrate: [200, 100, 200], // Vibration pattern for mobile
+            });
+
+            notification.onclick = () => {
+              window.focus();
+              notification.close();
+            };
+          } catch (err) {
+            console.error("Error showing notification:", err);
+          }
+        }, 0);
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission();
+      }
+    }
+  };
+
+  // Helper to play notification sounds
+  const playSound = (type) => {
+    try {
+      const soundFile = type === "alert" ? "/alert.mp3" : "/notification.mp3";
+      const audio = new Audio(soundFile);
+      audio.volume = type === "alert" ? 1.0 : 0.7;
+      audio.play().catch((err) => console.log("Audio play error:", err));
+    } catch (err) {
+      console.log("Audio error:", err);
+    }
   };
 
   return (
@@ -1200,6 +1176,8 @@ const Dashboard = () => {
                                   ? "bg-green-100 dark:bg-green-900"
                                   : activity.type === "warning"
                                   ? "bg-amber-100 dark:bg-amber-900"
+                                  : activity.type === "trip_start"
+                                  ? "bg-blue-100 dark:bg-blue-900"
                                   : "bg-red-100 dark:bg-red-900"
                               } z-10`}
                             >
@@ -1211,7 +1189,14 @@ const Dashboard = () => {
                               </p>
                               <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
                                 <Clock className="w-3 h-3 mr-1" />
-                                <span>{activity.timestamp}</span>
+                                <span>
+                                  {activity.displayTime ||
+                                    (activity.timestamp &&
+                                      new Date(
+                                        activity.timestamp
+                                      ).toLocaleTimeString()) ||
+                                    "Unknown time"}
+                                </span>
                               </div>
                             </div>
                           </div>
