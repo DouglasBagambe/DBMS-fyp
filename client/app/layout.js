@@ -4,6 +4,12 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
 
+// Import dynamic config
+import { dynamic, dynamicParams } from "./config";
+
+// Export dynamic config
+export { dynamic, dynamicParams };
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {

@@ -16,18 +16,6 @@ const nextConfig = {
     // Don't run TypeScript checking during build for faster builds
     ignoreBuildErrors: true,
   },
-  // Skip prerendering for dynamic routes
-  exportPathMap: async function () {
-    return {
-      "/": { page: "/" },
-      "/login": { page: "/login" },
-      "/signup": { page: "/signup" },
-      "/dashboard": { page: "/dashboard" },
-      "/incidents": { page: "/incidents" },
-      // Add any other static routes here
-      // Dynamic routes like /driver-details will be handled client-side
-    };
-  },
 };
 
 module.exports = nextConfig;
