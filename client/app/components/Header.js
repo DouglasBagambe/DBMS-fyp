@@ -443,9 +443,9 @@ const Header = () => {
                     User Profile
                   </Link>
                   <Link
-                    to="/notifications"
+                    to="/incidents"
                     className={`flex items-center px-4 py-3 ${
-                      isActive("/notifications")
+                      isActive("/incidents")
                         ? "bg-blue-50 dark:bg-blue-900 dark:bg-opacity-30 text-blue-600 dark:text-blue-300 border-l-4 border-blue-500"
                         : "text-gray-800 dark:text-gray-200"
                     }`}
