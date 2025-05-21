@@ -16,6 +16,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Notifications from "./Notifications";
 
 const AllIncidents = () => {
   const [incidents, setIncidents] = useState([]);
@@ -144,6 +145,7 @@ const AllIncidents = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <Notifications /> 
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center mb-8">
           <button
@@ -293,7 +295,7 @@ const AllIncidents = () => {
                           {incident.description && (
                             <div className="w-full mt-2">
                               <p className="text-sm italic">
-                                "{incident.description}"
+                                {incident.description}
                               </p>
                             </div>
                           )}
