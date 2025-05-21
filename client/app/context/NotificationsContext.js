@@ -358,7 +358,21 @@ export const NotificationsProvider = ({ children }) => {
       if (audioRef.current) {
         audioRef.current
           .play()
-          .catch((err) => console.log("Error playing sound:", err));
+          .catch((err) => {
+            console.log("Error playing sound:", err);
+            // Try a simple beep as fallback
+            try {
+              const context = new (window.AudioContext || window.webkitAudioContext)();
+              const oscillator = context.createOscillator();
+              oscillator.type = "sine";
+              oscillator.frequency.setValueAtTime(incidentInfo?.severity === "high" ? 800 : 400, context.currentTime);
+              oscillator.connect(context.destination);
+              oscillator.start();
+              oscillator.stop(context.currentTime + 0.3);
+            } catch (beepErr) {
+              console.log("Even beep fallback failed:", beepErr);
+            }
+          });
       }
     }
 
@@ -518,17 +532,28 @@ export const NotificationsProvider = ({ children }) => {
       console.error("Failed to load notification history:", error);
     }
 
-    // Setup audio for notification sounds with preloading
-    highAlertAudioRef.current = new Audio("/sounds/alert-high.mp3");
-    mediumAlertAudioRef.current = new Audio("/sounds/alert-medium.mp3");
-    lowAlertAudioRef.current = new Audio("/sounds/alert-low.mp3");
-    tripAudioRef.current = new Audio("/sounds/notification.mp3");
+    // Setup audio for notification sounds with preloading and error handling
+    const setupAudio = (path, fallbackPath) => {
+      try {
+        const audio = new Audio(path);
+        audio.addEventListener('error', (e) => {
+          console.warn(`Error loading audio from ${path}, trying fallback`, e);
+          audio.src = fallbackPath;
+        });
+        audio.load();
+        return audio;
+      } catch (e) {
+        console.error("Error setting up audio:", e);
+        // Return a dummy audio object to prevent errors
+        return { play: () => Promise.resolve(), load: () => {}, volume: 1 };
+      }
+    };
 
-    // Preload sounds
-    highAlertAudioRef.current.load();
-    mediumAlertAudioRef.current.load();
-    lowAlertAudioRef.current.load();
-    tripAudioRef.current.load();
+    // Try with different paths
+    highAlertAudioRef.current = setupAudio("/sounds/alert-high.mp3", "/alert-high.mp3");
+    mediumAlertAudioRef.current = setupAudio("/sounds/alert-medium.mp3", "/alert-medium.mp3");
+    lowAlertAudioRef.current = setupAudio("/sounds/alert-low.mp3", "/alert-low.mp3");
+    tripAudioRef.current = setupAudio("/sounds/notification.mp3", "/notification.mp3");
 
     // Set volumes
     highAlertAudioRef.current.volume = 1.0;

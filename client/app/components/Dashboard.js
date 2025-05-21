@@ -872,10 +872,28 @@ const Dashboard = () => {
   // Helper to play notification sounds
   const playSound = (type) => {
     try {
-      const soundFile = type === "alert" ? "/alert.mp3" : "/notification.mp3";
+      // Use correct path to audio files (likely in public folder)
+      const soundFile =
+        type === "alert" ? "/sounds/alert.mp3" : "/sounds/notification.mp3";
+
+      // Create audio element with error handling
       const audio = new Audio(soundFile);
       audio.volume = type === "alert" ? 1.0 : 0.7;
-      audio.play().catch((err) => console.log("Audio play error:", err));
+
+      // Play with better error handling
+      audio.play().catch((err) => {
+        console.log("Audio play error:", err);
+        // Try fallback sound if first one fails
+        if (soundFile.includes("/sounds/")) {
+          // Try without /sounds/ subfolder
+          const fallbackFile =
+            type === "alert" ? "/alert.mp3" : "/notification.mp3";
+          const fallbackAudio = new Audio(fallbackFile);
+          fallbackAudio.play().catch((fallbackErr) => {
+            console.log("Fallback audio play error:", fallbackErr);
+          });
+        }
+      });
     } catch (err) {
       console.log("Audio error:", err);
     }
@@ -1199,8 +1217,18 @@ const Dashboard = () => {
                                   </h4>
                                   <div className="flex items-center space-x-1 text-sm">
                                     <Clock className="w-4 h-4" />
-                                    <span title={alert.created_at}>
-                                      {alert.timestamp}
+                                    <span
+                                      title={
+                                        typeof alert.created_at === "object"
+                                          ? alert.created_at.toISOString()
+                                          : alert.created_at
+                                      }
+                                    >
+                                      {typeof alert.timestamp === "string"
+                                        ? alert.timestamp
+                                        : typeof alert.timestamp === "object"
+                                        ? alert.timestamp.toLocaleTimeString()
+                                        : "Unknown time"}
                                     </span>
                                   </div>
                                 </div>
@@ -1296,10 +1324,8 @@ const Dashboard = () => {
                                 <Clock className="w-3 h-3 mr-1" />
                                 <span>
                                   {activity.displayTime ||
-                                    (activity.timestamp &&
-                                      new Date(
-                                        activity.timestamp
-                                      ).toLocaleTimeString()) ||
+                                    (typeof activity.timestamp === "object" &&
+                                      activity.timestamp.toLocaleTimeString()) ||
                                     "Unknown time"}
                                 </span>
                               </div>
