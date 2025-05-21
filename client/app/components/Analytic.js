@@ -1359,62 +1359,112 @@ const Analytics = () => {
                   In selected period
                 </p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">
-                  Driver Safety
-                </h3>
-                <div className="flex justify-between">
-                  <div className="text-center flex-1 border-r border-gray-200 dark:border-gray-700 pr-2">
-                    <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase">
-                      Safest Driver
-                    </p>
-                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
-                      {analytics.drivers && analytics.drivers.length > 0
-                        ? analytics.drivers
-                            .reduce((prev, curr) =>
-                              curr.incidents < prev.incidents ? curr : prev
-                            )
-                            .name.split(" ")[0]
-                        : "N/A"}
-                    </p>
-                    <div className="inline-flex items-center bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded mt-1">
-                      <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
-                      <span className="text-xs text-green-700 dark:text-green-400">
-                        0 incidents
-                      </span>
-                    </div>
+              {selectedVehicle !== "all" ? (
+                // Show assigned driver for selected vehicle
+                <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">
+                    Assigned Driver
+                  </h3>
+                  <div className="text-center py-1">
+                    {analytics.vehicles && analytics.vehicles.length > 0 ? (
+                      <>
+                        <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center mx-auto mb-2">
+                          <UserCircle className="w-10 h-10 text-primary-500" />
+                        </div>
+                        <p className="text-lg font-bold text-gray-800 dark:text-gray-200">
+                          {analytics.vehicles[0]?.driverName || "Unassigned"}
+                        </p>
+                        <div className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 px-2 py-1 rounded mt-1">
+                          <Car className="w-4 h-4 text-blue-500 mr-1" />
+                          <span className="text-xs text-blue-700 dark:text-blue-400">
+                            {selectedVehicle}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        No driver assigned
+                      </p>
+                    )}
                   </div>
-                  <div className="text-center flex-1 pl-2">
-                    <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase">
-                      Needs Attention
-                    </p>
-                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
-                      {analytics.drivers && analytics.drivers.length > 0
-                        ? analytics.drivers
-                            .reduce(
-                              (prev, curr) =>
-                                curr.incidents > prev.incidents ? curr : prev,
-                              { incidents: -1 }
-                            )
-                            .name?.split(" ")[0] || "N/A"
-                        : "N/A"}
-                    </p>
-                    <div className="inline-flex items-center bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded mt-1">
-                      <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>
-                      <span className="text-xs text-red-700 dark:text-red-400">
+                </div>
+              ) : (
+                // Show driver safety metrics when all vehicles selected
+                <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">
+                    Driver Safety
+                  </h3>
+                  <div className="flex justify-between">
+                    <div className="text-center flex-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+                      <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase">
+                        Safest Driver
+                      </p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
                         {analytics.drivers && analytics.drivers.length > 0
-                          ? analytics.drivers.reduce(
-                              (prev, curr) =>
-                                curr.incidents > prev.incidents ? curr : prev,
-                              { incidents: -1 }
-                            ).incidents
-                          : 0}{" "}
-                        incidents
-                      </span>
+                          ? analytics.drivers
+                              .filter(
+                                (driver) =>
+                                  driver.name && driver.incidents === 0
+                              )
+                              .map(
+                                (driver) => driver.name?.split(" ")[0] || ""
+                              )[0] ||
+                            analytics.drivers
+                              .sort(
+                                (a, b) =>
+                                  (a.incidents || 0) - (b.incidents || 0)
+                              )
+                              .filter((d) => d.name)[0]
+                              ?.name?.split(" ")[0] ||
+                            "N/A"
+                          : "N/A"}
+                      </p>
+                      <div className="inline-flex items-center bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded mt-1">
+                        <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                        <span className="text-xs text-green-700 dark:text-green-400">
+                          {analytics.drivers && analytics.drivers.length > 0
+                            ? Math.min(
+                                ...analytics.drivers.map(
+                                  (d) => d.incidents || 0
+                                )
+                              )
+                            : 0}{" "}
+                          incidents
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-center flex-1 pl-2">
+                      <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase">
+                        Needs Attention
+                      </p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
+                        {analytics.drivers && analytics.drivers.length > 0
+                          ? analytics.drivers
+                              .filter((d) => d.name)
+                              .sort(
+                                (a, b) =>
+                                  (b.incidents || 0) - (a.incidents || 0)
+                              )[0]
+                              ?.name?.split(" ")[0] || "N/A"
+                          : "N/A"}
+                      </p>
+                      <div className="inline-flex items-center bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded mt-1">
+                        <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                        <span className="text-xs text-red-700 dark:text-red-400">
+                          {analytics.drivers && analytics.drivers.length > 0
+                            ? Math.max(
+                                ...analytics.drivers.map(
+                                  (d) => d.incidents || 0
+                                )
+                              )
+                            : 0}{" "}
+                          incidents
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
               <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                   Safety Score
@@ -1454,27 +1504,56 @@ const Analytics = () => {
               <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 h-80">
                 {analytics.incidentsByVehicle &&
                 analytics.incidentsByVehicle.length > 0 ? (
-                  <Bar
-                    data={{
-                      labels: analytics.incidentsByVehicle.map(
-                        (item) => item.vehicleNumber
-                      ),
-                      datasets: [
-                        {
-                          label: "Incidents",
-                          data: analytics.incidentsByVehicle.map(
-                            (item) => item.incidents
-                          ),
-                          backgroundColor: "rgba(59, 130, 246, 0.8)",
-                          borderColor: "rgb(37, 99, 235)",
-                          borderWidth: 1,
-                          borderRadius: 6,
-                          hoverBackgroundColor: "rgba(59, 130, 246, 1)",
-                        },
-                      ],
+                  <div
+                    style={{
+                      position: "relative",
+                      height: "100%",
+                      width: "100%",
                     }}
-                    options={barChartOptions}
-                  />
+                  >
+                    <Bar
+                      data={{
+                        labels: analytics.incidentsByVehicle.map(
+                          (v) => v.vehicleNumber || "Unknown"
+                        ),
+                        datasets: [
+                          {
+                            label: "Incidents",
+                            data: analytics.incidentsByVehicle.map(
+                              (v) => v.incidents || 0
+                            ),
+                            backgroundColor: "rgba(59, 130, 246, 0.8)",
+                            borderColor: "rgb(37, 99, 235)",
+                            borderWidth: 1,
+                            hoverBackgroundColor: "rgba(59, 130, 246, 1)",
+                          },
+                        ],
+                      }}
+                      options={{
+                        maintainAspectRatio: false,
+                        responsive: true,
+                        plugins: {
+                          legend: { display: false },
+                          title: {
+                            display: true,
+                            text: "Incidents by Vehicle",
+                            font: { size: 16, weight: "bold" },
+                            color: "#374151",
+                            padding: { top: 10, bottom: 20 },
+                          },
+                        },
+                        scales: {
+                          y: {
+                            beginAtZero: true,
+                            ticks: { color: "#6B7280" },
+                          },
+                          x: {
+                            ticks: { color: "#6B7280" },
+                          },
+                        },
+                      }}
+                    />
+                  </div>
                 ) : (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-gray-500 dark:text-gray-400">
