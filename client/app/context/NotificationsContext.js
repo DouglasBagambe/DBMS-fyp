@@ -227,24 +227,40 @@ export const NotificationsProvider = ({ children }) => {
             console.error("Invalid incident data received: empty incident");
             return;
           }
-          
-          // Normalize the incident number field
+
+          // Normalize the incident number field - check both formats
           const incidentNo = incident.incidentNo || incident.incident_no;
-          
+
           if (!incidentNo) {
-            console.error("Invalid incident data: no incident number found", incident);
+            console.error(
+              "Invalid incident data: no incident number found",
+              incident
+            );
             return;
           }
-          
+
           // Create normalized incident object to ensure consistent field names
           const normalizedIncident = {
             id: incident.id || Date.now(),
             driverId: incident.driverId || incident.driver_id,
-            driverName: incident.driverName || incident.driver_name || "Unknown Driver",
+            driverName:
+              incident.driverName || incident.driver_name || "Unknown Driver",
             vehicleId: incident.vehicleId || incident.vehicle_id,
-            vehicleNumber: incident.vehicleNumber || incident.vehicle_number || "Unknown Vehicle",
+            vehicleNumber:
+              incident.vehicleNumber ||
+              incident.vehicle_number ||
+              "Unknown Vehicle",
             incidentNo: incidentNo,
-            timestamp: incident.timestamp || incident.created_at || incident.incident_date || new Date().toISOString(),
+            incident_no: incidentNo, // Include both versions for compatibility
+            incidentType: incident.incidentType || incident.incident_type,
+            incident_type: incident.incidentType || incident.incident_type,
+            timestamp:
+              incident.timestamp ||
+              incident.created_at ||
+              incident.incident_date ||
+              new Date().toISOString(),
+            severity: incident.severity || 1,
+            type: incident.type || "safety_incident",
           };
 
           console.log("Normalized incoming incident:", normalizedIncident);
@@ -316,6 +332,9 @@ export const NotificationsProvider = ({ children }) => {
       vehicleNumber:
         incident.vehicleNumber || incident.vehicle_number || "Unknown Vehicle",
       incidentNo: incident.incidentNo || incident.incident_no,
+      incident_no: incident.incidentNo || incident.incident_no, // Add both formats
+      incidentType: incident.incidentType || incident.incident_type,
+      incident_type: incident.incidentType || incident.incident_type, // Add both formats
       timestamp:
         incident.timestamp ||
         incident.created_at ||
@@ -331,6 +350,8 @@ export const NotificationsProvider = ({ children }) => {
       alertType: "incident",
       alertTitle: "SAFETY ALERT",
     });
+
+    console.log("Setting alert data and showing alert");
     setShowAlert(true);
 
     // Get incident info for additional details

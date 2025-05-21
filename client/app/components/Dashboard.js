@@ -193,16 +193,22 @@ const Dashboard = () => {
             const formattedIncident = {
               id: incident.id || Date.now(),
               driverId: incident.driverId || incident.driver_id,
-              driverName,
+              driver_id: incident.driverId || incident.driver_id, // Include both versions
+              driverName: driverName,
+              driver_name: driverName, // Include both versions
               vehicleId: incident.vehicleId || incident.vehicle_id,
-              vehicleNumber,
-              incidentNo,
+              vehicle_id: incident.vehicleId || incident.vehicle_id, // Include both versions
+              vehicleNumber: vehicleNumber,
+              vehicle_number: vehicleNumber, // Include both versions
+              incidentNo: incidentNo,
+              incident_no: incidentNo, // Include both versions
+              incidentType: incident.incidentType || incident.incident_type,
+              incident_type: incident.incidentType || incident.incident_type, // Include both versions
               timestamp,
               created_at: incident.created_at || timestamp.toISOString(),
               type: incidentInfo.type.toLowerCase(),
-              severity: incidentInfo.severity,
+              severity: incidentInfo.severity || incident.severity || "medium",
               message: `Driver ${driverName}: ${incidentInfo.message}`,
-              incident_no: incidentNo, // Ensure consistent field naming
             };
 
             console.log(
@@ -223,6 +229,7 @@ const Dashboard = () => {
               const trimmedAlerts = updatedAlerts.slice(0, 20);
 
               console.log("Updated alerts list:", trimmedAlerts.length);
+              console.log("First 3 alerts:", trimmedAlerts.slice(0, 3));
 
               return {
                 ...prev,
@@ -248,12 +255,12 @@ const Dashboard = () => {
               const updatedActivities = [
                 newActivity,
                 ...(prev?.filter((a) => a.id !== newActivity.id) || []),
-              ];
+              ].slice(0, 20); // Keep only top 20
 
-              // Sort all activities by timestamp (newest first) and keep top 20
-              return updatedActivities
-                .sort((a, b) => b.sortTime - a.sortTime)
-                .slice(0, 20);
+              console.log("Updated activity list:", updatedActivities.length);
+              console.log("First 3 activities:", updatedActivities.slice(0, 3));
+
+              return updatedActivities;
             });
 
             // Update metrics
