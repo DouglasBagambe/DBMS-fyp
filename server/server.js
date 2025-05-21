@@ -18,6 +18,7 @@ const userRoutes = require("./routes/user");
 const vehicleRoutes = require("./routes/vehicles");
 const driverRoutes = require("./routes/drivers");
 const driverAuthRoutes = require("./routes/driverAuth");
+const tripRoutes = require("./routes/trips");
 const { authenticateToken } = require("./middleware/auth");
 
 // Create Express app
@@ -94,6 +95,7 @@ app.use("/api/user", userRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/driver-auth", driverAuthRoutes);
+app.use("/api/trips", tripRoutes);
 app.get("/api/dashboard", authenticateToken, (req, res) => {
   res.json({ message: "Authenticated dashboard access" });
 });
